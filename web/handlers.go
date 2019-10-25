@@ -4,7 +4,9 @@
 package web
 
 import (
+	"bytes"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"reflect"
 	"runtime"
@@ -66,6 +68,8 @@ type Handler struct {
 	TrustRequester      bool
 	RequireMfa          bool
 	IsStatic            bool
+	Passthrough         bool
+	AllowFormCSRFTokens bool
 
 	cspShaDirective string
 }
@@ -108,7 +112,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"frame-ancestors 'self'; script-src 'self' cdn.segment.com/analytics.js/%s",
 			h.cspShaDirective,
 		))
-	} else {
+	} else if !h.Passthrough {
 		// All api response bodies will be JSON formatted by default
 		w.Header().Set("Content-Type", "application/json")
 
@@ -191,7 +195,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			c.Err.IsOAuth = false
 		}
 
-		if IsApiCall(c.App, r) || IsWebhookCall(c.App, r) || IsOAuthApiCall(c.App, r) || len(r.Header.Get("X-Mobile-App")) > 0 {
+		if IsApiCall(c.App, r) || IsWebhookCall(c.App, r) || IsOAuthApiCall(c.App, r) || len(r.Header.Get("X-Mobile-App")) > 0 || h.Passthrough {
 			w.WriteHeader(c.Err.StatusCode)
 			w.Write([]byte(c.Err.ToJson()))
 		} else {
@@ -216,49 +220,57 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // checkCSRFToken performs a CSRF check on the provided request with the given CSRF token. Returns whether or not
 // a CSRF check occurred and whether or not it succeeded.
-func (h *Handler) checkCSRFToken(c *Context, r *http.Request, token string, tokenLocation app.TokenLocation, session *model.Session) (checked bool, passed bool) {
-	csrfCheckNeeded := c.Err == nil && tokenLocation == app.TokenLocationCookie && h.RequireSession && !h.TrustRequester && r.Method != "GET"
-	csrfCheckPassed := false
-
-	if csrfCheckNeeded {
-		csrfHeader := r.Header.Get(model.HEADER_CSRF_TOKEN)
-
-		if csrfHeader == session.GetCSRF() {
-			csrfCheckPassed = true
-		} else if r.Header.Get(model.HEADER_REQUESTED_WITH) == model.HEADER_REQUESTED_WITH_XML {
-			// ToDo(DSchalla) 2019/01/04: Remove after deprecation period and only allow CSRF Header (MM-13657)
-			csrfErrorMessage := "CSRF Header check failed for request - Please upgrade your web application or custom app to set a CSRF Header"
-
-			sid := ""
-			userId := ""
-
-			if session != nil {
-				sid = session.Id
-				userId = session.UserId
-			}
-
-			fields := []mlog.Field{
-				mlog.String("path", r.URL.Path),
-				mlog.String("ip", r.RemoteAddr),
-				mlog.String("session_id", sid),
-				mlog.String("user_id", userId),
-			}
-
-			if *c.App.Config().ServiceSettings.ExperimentalStrictCSRFEnforcement {
-				c.Log.Warn(csrfErrorMessage, fields...)
-			} else {
-				c.Log.Debug(csrfErrorMessage, fields...)
-				csrfCheckPassed = true
-			}
-		}
-
-		if !csrfCheckPassed {
-			c.App.Session = model.Session{}
-			c.Err = model.NewAppError("ServeHTTP", "api.context.session_expired.app_error", nil, "token="+token+" Appears to be a CSRF attempt", http.StatusUnauthorized)
-		}
+func (h *Handler) checkCSRFToken(c *Context, r *http.Request, token string, tokenLocation app.TokenLocation, session *model.Session) {
+	// Skip if there is already an existing error.
+	if c.Err != nil {
+		return
 	}
 
-	return csrfCheckNeeded, csrfCheckPassed
+	// GET requests do not require CSRF checking.
+	if r.Method == http.MethodGet {
+		return
+	}
+
+	// Skip if requested by the configured handler.
+	if h.TrustRequester || !h.RequireSession {
+		return
+	}
+
+	// Only cookie tokens are subject to CSRF.
+	if tokenLocation != app.TokenLocationCookie {
+		return
+	}
+
+	csrfToken := r.Header.Get(model.HEADER_CSRF_TOKEN)
+	if csrfToken == "" && h.AllowFormCSRFTokens {
+		bodyBytes, _ := ioutil.ReadAll(r.Body)
+		r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+		r.ParseForm()
+		csrfToken = r.FormValue("csrf")
+		r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+	}
+
+	if csrfToken == session.GetCSRF() {
+		return
+	}
+
+	// Temporarily allow an explicit `X-Requested-With: XMLHttpRequest` header to ignore CSRF
+	// protections, unless ExperimentalStrictCSRFEnforcement is enforced.
+	if r.Header.Get(model.HEADER_REQUESTED_WITH) == model.HEADER_REQUESTED_WITH_XML {
+		// ToDo(DSchalla) 2019/01/04: Remove after deprecation period and only allow CSRF Header (MM-13657)
+		csrfErrorMessage := "CSRF Header check failed for request - Please upgrade your web application or custom app to set a CSRF Header"
+		// csrfErrorMessage := "CSRF Check failed for request - Please migrate your plugin to either send a CSRF Header or Form Field, XMLHttpRequest is deprecated"
+
+		if !*c.App.Config().ServiceSettings.ExperimentalStrictCSRFEnforcement {
+			c.Log.Debug(csrfErrorMessage)
+			return
+		}
+
+		c.Log.Warn(csrfErrorMessage)
+	}
+
+	c.App.Session = model.Session{}
+	c.Err = model.NewAppError("ServeHTTP", "api.context.session_expired.app_error", nil, "token="+token+" Appears to be a CSRF attempt", http.StatusUnauthorized)
 }
 
 // ApiHandler provides a handler for API endpoints which do not require the user to be logged in order for access to be

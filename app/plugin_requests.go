@@ -10,9 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"bytes"
-	"io/ioutil"
-
 	"github.com/gorilla/mux"
 	"github.com/mattermost/mattermost-server/mlog"
 	"github.com/mattermost/mattermost-server/model"
@@ -71,86 +68,22 @@ func (a *App) ServePluginPublicRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) servePluginRequest(w http.ResponseWriter, r *http.Request, handler func(*plugin.Context, http.ResponseWriter, *http.Request)) {
-	token := ""
 	context := &plugin.Context{
-		RequestId:      model.NewId(),
+		RequestId:      a.RequestId,
 		IpAddress:      utils.GetIpAddress(r, a.Config().ServiceSettings.TrustedProxyIPHeader),
 		AcceptLanguage: r.Header.Get("Accept-Language"),
 		UserAgent:      r.UserAgent(),
 	}
-	cookieAuth := false
 
-	authHeader := r.Header.Get(model.HEADER_AUTH)
-	if strings.HasPrefix(strings.ToUpper(authHeader), model.HEADER_BEARER+" ") {
-		token = authHeader[len(model.HEADER_BEARER)+1:]
-	} else if strings.HasPrefix(strings.ToLower(authHeader), model.HEADER_TOKEN+" ") {
-		token = authHeader[len(model.HEADER_TOKEN)+1:]
-	} else if cookie, _ := r.Cookie(model.SESSION_COOKIE_TOKEN); cookie != nil {
-		token = cookie.Value
-		cookieAuth = true
-	} else {
-		token = r.URL.Query().Get("access_token")
-	}
-
+	// Ignore any user-provided Mattermost-User-Id header, and replace it with the one from
+	// the session, if present. CSRF checking already occurred in web/handlers.go.
 	r.Header.Del("Mattermost-User-Id")
-	if token != "" {
-		session, err := a.GetSession(token)
-		csrfCheckPassed := false
-
-		if err == nil && cookieAuth && r.Method != "GET" {
-			sentToken := ""
-
-			if r.Header.Get(model.HEADER_CSRF_TOKEN) == "" {
-				bodyBytes, _ := ioutil.ReadAll(r.Body)
-				r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
-				r.ParseForm()
-				sentToken = r.FormValue("csrf")
-				r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
-			} else {
-				sentToken = r.Header.Get(model.HEADER_CSRF_TOKEN)
-			}
-
-			expectedToken := session.GetCSRF()
-
-			if sentToken == expectedToken {
-				csrfCheckPassed = true
-			}
-
-			// ToDo(DSchalla) 2019/01/04: Remove after deprecation period and only allow CSRF Header (MM-13657)
-			if r.Header.Get(model.HEADER_REQUESTED_WITH) == model.HEADER_REQUESTED_WITH_XML && !csrfCheckPassed {
-				csrfErrorMessage := "CSRF Check failed for request - Please migrate your plugin to either send a CSRF Header or Form Field, XMLHttpRequest is deprecated"
-				sid := ""
-				userId := ""
-
-				if session != nil {
-					sid = session.Id
-					userId = session.UserId
-				}
-
-				fields := []mlog.Field{
-					mlog.String("path", r.URL.Path),
-					mlog.String("ip", r.RemoteAddr),
-					mlog.String("session_id", sid),
-					mlog.String("user_id", userId),
-				}
-
-				if *a.Config().ServiceSettings.ExperimentalStrictCSRFEnforcement {
-					a.Log.Warn(csrfErrorMessage, fields...)
-				} else {
-					a.Log.Debug(csrfErrorMessage, fields...)
-					csrfCheckPassed = true
-				}
-			}
-		} else {
-			csrfCheckPassed = true
-		}
-
-		if session != nil && err == nil && csrfCheckPassed {
-			r.Header.Set("Mattermost-User-Id", session.UserId)
-			context.SessionId = session.Id
-		}
+	if a.Session.UserId != "" {
+		context.SessionId = a.Session.Id
+		r.Header.Set("Mattermost-User-Id", a.Session.UserId)
 	}
 
+	// Allow all cookies through except for the session token.
 	cookies := r.Cookies()
 	r.Header.Del("Cookie")
 	for _, c := range cookies {
@@ -158,6 +91,8 @@ func (a *App) servePluginRequest(w http.ResponseWriter, r *http.Request, handler
 			r.AddCookie(c)
 		}
 	}
+
+	// Drop the Authorization and Referer headers.
 	r.Header.Del(model.HEADER_AUTH)
 	r.Header.Del("Referer")
 

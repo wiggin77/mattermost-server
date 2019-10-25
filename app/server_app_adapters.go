@@ -100,10 +100,6 @@ func (s *Server) RunOldAppInitalization() error {
 		return errors.Wrap(err, "failed to parse SiteURL subpath")
 	}
 	s.FakeApp().Srv.Router = s.FakeApp().Srv.RootRouter.PathPrefix(subpath).Subrouter()
-	pluginsRoute := s.FakeApp().Srv.Router.PathPrefix("/plugins/{plugin_id:[A-Za-z0-9\\_\\-\\.]+}").Subrouter()
-	pluginsRoute.HandleFunc("", s.FakeApp().ServePluginRequest)
-	pluginsRoute.HandleFunc("/public/{public_file:.*}", s.FakeApp().ServePluginPublicRequest)
-	pluginsRoute.HandleFunc("/{anything:.*}", s.FakeApp().ServePluginRequest)
 
 	// If configured with a subpath, redirect 404s at the root back into the subpath.
 	if subpath != "/" {

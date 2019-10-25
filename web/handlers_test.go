@@ -363,10 +363,7 @@ func TestCheckCSRFToken(t *testing.T) {
 			},
 		}
 
-		checked, passed := h.checkCSRFToken(c, r, token, tokenLocation, session)
-
-		assert.True(t, checked)
-		assert.True(t, passed)
+		h.checkCSRFToken(c, r, token, tokenLocation, session)
 		assert.Nil(t, c.Err)
 	})
 
@@ -394,10 +391,7 @@ func TestCheckCSRFToken(t *testing.T) {
 			},
 		}
 
-		checked, passed := h.checkCSRFToken(c, r, token, tokenLocation, session)
-
-		assert.True(t, checked)
-		assert.True(t, passed)
+		h.checkCSRFToken(c, r, token, tokenLocation, session)
 		assert.Nil(t, c.Err)
 	})
 
@@ -429,10 +423,7 @@ func TestCheckCSRFToken(t *testing.T) {
 			},
 		}
 
-		checked, passed := h.checkCSRFToken(c, r, token, tokenLocation, session)
-
-		assert.True(t, checked)
-		assert.False(t, passed)
+		h.checkCSRFToken(c, r, token, tokenLocation, session)
 		assert.NotNil(t, c.Err)
 	})
 
@@ -458,10 +449,7 @@ func TestCheckCSRFToken(t *testing.T) {
 			},
 		}
 
-		checked, passed := h.checkCSRFToken(c, r, token, tokenLocation, session)
-
-		assert.True(t, checked)
-		assert.False(t, passed)
+		h.checkCSRFToken(c, r, token, tokenLocation, session)
 		assert.NotNil(t, c.Err)
 	})
 
@@ -482,10 +470,7 @@ func TestCheckCSRFToken(t *testing.T) {
 		}
 		r, _ := http.NewRequest(http.MethodGet, "", nil)
 
-		checked, passed := h.checkCSRFToken(c, r, token, tokenLocation, nil)
-
-		assert.False(t, checked)
-		assert.False(t, passed)
+		h.checkCSRFToken(c, r, token, tokenLocation, nil)
 		assert.Nil(t, c.Err)
 	})
 
@@ -506,10 +491,7 @@ func TestCheckCSRFToken(t *testing.T) {
 		}
 		r, _ := http.NewRequest(http.MethodPost, "", nil)
 
-		checked, passed := h.checkCSRFToken(c, r, token, tokenLocation, nil)
-
-		assert.False(t, checked)
-		assert.False(t, passed)
+		h.checkCSRFToken(c, r, token, tokenLocation, nil)
 		assert.Nil(t, c.Err)
 	})
 }
