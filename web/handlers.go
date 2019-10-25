@@ -91,7 +91,12 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.App.AcceptLanguage = r.Header.Get("Accept-Language")
 	c.Params = ParamsFromRequest(r)
 	c.App.Path = r.URL.Path
-	c.Log = c.App.Log
+	c.Log = c.App.Log.With(
+		mlog.String("path", c.App.Path),
+		mlog.String("request_id", c.App.RequestId),
+		mlog.String("ip_addr", c.App.IpAddress),
+		mlog.String("method", r.Method),
+	)
 
 	subpath, _ := utils.GetSubpathFromConfig(c.App.Config())
 	siteURLHeader := app.GetProtocol(r) + "://" + r.Host + subpath
@@ -139,6 +144,11 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			c.App.Session = *session
 		}
 
+		c.Log = c.Log.With(
+			mlog.String("session_id", c.App.Session.Id),
+			mlog.String("user_id", c.App.Session.UserId),
+		)
+
 		// Rate limit by UserID
 		if c.App.Srv.RateLimiter != nil && c.App.Srv.RateLimiter.UserIdRateLimit(c.App.Session.UserId, w) {
 			return
@@ -146,14 +156,6 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		h.checkCSRFToken(c, r, token, tokenLocation, session)
 	}
-
-	c.Log = c.App.Log.With(
-		mlog.String("path", c.App.Path),
-		mlog.String("request_id", c.App.RequestId),
-		mlog.String("ip_addr", c.App.IpAddress),
-		mlog.String("user_id", c.App.Session.UserId),
-		mlog.String("method", r.Method),
-	)
 
 	if c.Err == nil && h.RequireSession {
 		c.SessionRequired()
