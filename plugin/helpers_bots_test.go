@@ -45,8 +45,8 @@ func TestEnsureBot(t *testing.T) {
 
 			p := &plugin.HelpersImpl{}
 			p.API = api
-			botId, err := p.EnsureBot(nil)
-			assert.Equal(t, "", botId)
+			botID, err := p.EnsureBot(nil)
+			assert.Equal(t, "", botID)
 			assert.NotNil(t, err)
 		})
 		t.Run("bad username", func(t *testing.T) {
@@ -55,29 +55,29 @@ func TestEnsureBot(t *testing.T) {
 
 			p := &plugin.HelpersImpl{}
 			p.API = api
-			botId, err := p.EnsureBot(&model.Bot{
+			botID, err := p.EnsureBot(&model.Bot{
 				Username: "",
 			})
-			assert.Equal(t, "", botId)
+			assert.Equal(t, "", botID)
 			assert.NotNil(t, err)
 		})
 	})
 
 	t.Run("if bot already exists", func(t *testing.T) {
 		t.Run("should find and return the existing bot ID", func(t *testing.T) {
-			expectedBotId := model.NewId()
+			expectedBotID := model.NewId()
 
 			api := setupAPI()
 			api.On("GetServerVersion").Return("5.10.0")
-			api.On("KVGet", plugin.BOT_USER_KEY).Return([]byte(expectedBotId), nil)
+			api.On("KVGet", plugin.BOT_USER_KEY).Return([]byte(expectedBotID), nil)
 			defer api.AssertExpectations(t)
 
 			p := &plugin.HelpersImpl{}
 			p.API = api
 
-			botId, err := p.EnsureBot(testbot)
+			botID, err := p.EnsureBot(testbot)
 
-			assert.Equal(t, expectedBotId, botId)
+			assert.Equal(t, expectedBotID, botID)
 			assert.Nil(t, err)
 		})
 
@@ -90,65 +90,65 @@ func TestEnsureBot(t *testing.T) {
 			p := &plugin.HelpersImpl{}
 			p.API = api
 
-			botId, err := p.EnsureBot(testbot)
+			botID, err := p.EnsureBot(testbot)
 
-			assert.Equal(t, "", botId)
+			assert.Equal(t, "", botID)
 			assert.NotNil(t, err)
 		})
 	})
 
 	t.Run("if bot doesn't exist", func(t *testing.T) {
 		t.Run("should create the bot and return the ID", func(t *testing.T) {
-			expectedBotId := model.NewId()
+			expectedBotID := model.NewId()
 
 			api := setupAPI()
 			api.On("GetServerVersion").Return("5.10.0")
 			api.On("KVGet", plugin.BOT_USER_KEY).Return(nil, nil)
 			api.On("GetUserByUsername", testbot.Username).Return(nil, nil)
 			api.On("CreateBot", testbot).Return(&model.Bot{
-				UserId: expectedBotId,
+				UserId: expectedBotID,
 			}, nil)
-			api.On("KVSet", plugin.BOT_USER_KEY, []byte(expectedBotId)).Return(nil)
+			api.On("KVSet", plugin.BOT_USER_KEY, []byte(expectedBotID)).Return(nil)
 			defer api.AssertExpectations(t)
 
 			p := &plugin.HelpersImpl{}
 			p.API = api
 
-			botId, err := p.EnsureBot(testbot)
+			botID, err := p.EnsureBot(testbot)
 
-			assert.Equal(t, expectedBotId, botId)
+			assert.Equal(t, expectedBotID, botID)
 			assert.Nil(t, err)
 		})
 
 		t.Run("should claim existing bot and return the ID", func(t *testing.T) {
-			expectedBotId := model.NewId()
+			expectedBotID := model.NewId()
 
 			api := setupAPI()
 			api.On("GetServerVersion").Return("5.10.0")
 			api.On("KVGet", plugin.BOT_USER_KEY).Return(nil, nil)
 			api.On("GetUserByUsername", testbot.Username).Return(&model.User{
-				Id:    expectedBotId,
+				Id:    expectedBotID,
 				IsBot: true,
 			}, nil)
-			api.On("KVSet", plugin.BOT_USER_KEY, []byte(expectedBotId)).Return(nil)
+			api.On("KVSet", plugin.BOT_USER_KEY, []byte(expectedBotID)).Return(nil)
 			defer api.AssertExpectations(t)
 
 			p := &plugin.HelpersImpl{}
 			p.API = api
 
-			botId, err := p.EnsureBot(testbot)
+			botID, err := p.EnsureBot(testbot)
 
-			assert.Equal(t, expectedBotId, botId)
+			assert.Equal(t, expectedBotID, botID)
 			assert.Nil(t, err)
 		})
 
 		t.Run("should return the non-bot account but log a message if user exists with the same name and is not a bot", func(t *testing.T) {
-			expectedBotId := model.NewId()
+			expectedBotID := model.NewId()
 			api := setupAPI()
 			api.On("GetServerVersion").Return("5.10.0")
 			api.On("KVGet", plugin.BOT_USER_KEY).Return(nil, nil)
 			api.On("GetUserByUsername", testbot.Username).Return(&model.User{
-				Id:    expectedBotId,
+				Id:    expectedBotID,
 				IsBot: false,
 			}, nil)
 			api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
@@ -157,9 +157,9 @@ func TestEnsureBot(t *testing.T) {
 			p := &plugin.HelpersImpl{}
 			p.API = api
 
-			botId, err := p.EnsureBot(testbot)
+			botID, err := p.EnsureBot(testbot)
 
-			assert.Equal(t, expectedBotId, botId)
+			assert.Equal(t, expectedBotID, botID)
 			assert.Nil(t, err)
 		})
 
@@ -174,9 +174,9 @@ func TestEnsureBot(t *testing.T) {
 			p := &plugin.HelpersImpl{}
 			p.API = api
 
-			botId, err := p.EnsureBot(testbot)
+			botID, err := p.EnsureBot(testbot)
 
-			assert.Equal(t, "", botId)
+			assert.Equal(t, "", botID)
 			assert.NotNil(t, err)
 		})
 	})

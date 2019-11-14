@@ -230,10 +230,7 @@ check-prereqs: ## Checks prerequisite software status.
 	./scripts/prereq-check.sh
 
 # TODO: remove govet and gofmt checks once golangci-lint is being enforced.
-check-style: govet gofmt check-licenses check-plugin-golint ## Runs govet and gofmt against all packages and also ensures plugin package golint compliant
-
-check-plugin-golint: # Checks if golint returns any uncompliant code for any file that starts with plugin/helpers
-	@! golint ./plugin/ | grep plugin/helpers
+check-style: govet gofmt check-licenses ## Runs govet and gofmt against all packages and also ensures plugin package golint compliant
 
 test-te-race: ## Checks for race conditions in the team edition.
 	@echo Testing TE race conditions
