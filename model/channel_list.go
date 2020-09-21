@@ -93,3 +93,45 @@ func ChannelListWithTeamDataFromJson(data io.Reader) *ChannelListWithTeamData {
 	json.NewDecoder(data).Decode(&o)
 	return o
 }
+
+type SharedChannelList []*SharedChannel
+
+func (o *SharedChannelList) ToJson() string {
+	if b, err := json.Marshal(o); err != nil {
+		return "[]"
+	} else {
+		return string(b)
+	}
+}
+
+func (o *SharedChannelList) Etag() string {
+	id := "0"
+	var t int64 = 0
+	var delta int64 = 0
+
+	for _, v := range *o {
+		if v.LastPostAt > t {
+			t = v.LastPostAt
+			id = v.Id
+		}
+
+		if v.UpdateAt > t {
+			t = v.UpdateAt
+			id = v.Id
+		}
+
+	}
+	return Etag(id, t, delta, len(*o))
+}
+
+func SharedChannelListFromJson(data io.Reader) *SharedChannelList {
+	var o *SharedChannelList
+	json.NewDecoder(data).Decode(&o)
+	return o
+}
+
+func SharedChannelSliceFromJson(data io.Reader) []*SharedChannel {
+	var o []*SharedChannel
+	json.NewDecoder(data).Decode(&o)
+	return o
+}

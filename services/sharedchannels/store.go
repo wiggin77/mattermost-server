@@ -10,7 +10,7 @@ type ChannelStore interface {
 	// GetSharedChannels fetches all shared channels across all teams from the
 	// SharedChannels table (joined with Channels table).
 	// TODO:  mocked for now
-	// GetSharedChannels(teamId string) (*model.ChannelList, error)
+	GetSharedChannels() (*model.ChannelList, error)
 }
 
 // PostStore is a subset of `store.PostStore`

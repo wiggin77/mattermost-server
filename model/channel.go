@@ -109,6 +109,15 @@ type ChannelModeratedRolesPatch struct {
 	Members *bool `json:"members"`
 }
 
+type SharedChannel struct {
+	Channel
+	Home             bool   `json:"home"`
+	ReadOnly         bool   `json:"readonly"`
+	ShareName        string `json:"sharename"`
+	ShareDisplayName string `json:"sharedisplayname"`
+	URL              string `json:"url"`
+}
+
 // ChannelSearchOpts contains options for searching channels.
 //
 // NotAssociatedToGroup will exclude channels that have associated, active GroupChannels records.

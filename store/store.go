@@ -163,6 +163,7 @@ type ChannelStore interface {
 	GetTeamChannels(teamId string) (*model.ChannelList, error)
 	GetAll(teamId string) ([]*model.Channel, error)
 	GetChannelsByIds(channelIds []string, includeDeleted bool) ([]*model.Channel, error)
+	GetSharedChannels() (*model.ChannelList, error)
 	GetForPost(postId string) (*model.Channel, error)
 	SaveMultipleMembers(members []*model.ChannelMember) ([]*model.ChannelMember, error)
 	SaveMember(member *model.ChannelMember) (*model.ChannelMember, error)

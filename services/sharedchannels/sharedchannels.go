@@ -89,5 +89,6 @@ func (ss *SyncService) stop() {
 // the remote clusters this server shares a channel with regardless of
 // where the channel is homed.
 func (ss *SyncService) buildClusterGroup() ([]clusterGroup, error) {
+
 	return nil, errors.New("not implemented yet")
 }
