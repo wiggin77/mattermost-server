@@ -1413,3 +1413,9 @@ func (s *Server) TelemetryId() string {
 func (s *Server) HttpService() httpservice.HTTPService {
 	return s.HTTPService
 }
+
+// GetStore returns the server's Store. Exposing via a method
+// allows interfaces to be created with subsets of server APIs.
+func (s *Server) GetStore() store.Store {
+	return s.Store
+}
