@@ -116,6 +116,7 @@ type SharedChannel struct {
 	ShareName        string `json:"sharename"`
 	ShareDisplayName string `json:"sharedisplayname"`
 	URL              string `json:"url"`
+	ShareToken       string `json:"sharetoken"`
 }
 
 // ChannelSearchOpts contains options for searching channels.
@@ -376,4 +377,15 @@ func GetGroupNameFromUserIds(userIds []string) string {
 	}
 
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+func (o *SharedChannel) ToJson() string {
+	b, _ := json.Marshal(o)
+	return string(b)
+}
+
+func SharedChannelFromJson(data io.Reader) *SharedChannel {
+	var o *SharedChannel
+	json.NewDecoder(data).Decode(&o)
+	return o
 }

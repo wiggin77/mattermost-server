@@ -2276,14 +2276,14 @@ func (s SqlChannelStore) GetChannelsByIds(channelIds []string, includeDeleted bo
 
 func (s SqlChannelStore) GetSharedChannels() (*model.SharedChannelList, error) {
 	// TODO:  create table and write SQL to fetch data.
-	// Temporarily mocked... all channels with "shared_channel" in purpose are shared.
+	// Temporarily mocked... all channels with "shared_channel" in purpose field are shared.
 	opts := store.ChannelSearchOpts{
-		Public: true,
+		Public:  true,
 		Private: true,
-		Page: model.NewInt(0),
+		Page:    model.NewInt(0),
 		PerPage: model.NewInt(200),
 	}
-	
+
 	all, err := s.GetAllChannels(0, 200, opts)
 	if err != nil {
 		return nil, err
@@ -2292,10 +2292,16 @@ func (s SqlChannelStore) GetSharedChannels() (*model.SharedChannelList, error) {
 	list := make(model.SharedChannelList, 0)
 
 	// walk list looking for channels to share
-	for _,channel := range *all {
+	for _, channel := range *all {
 		if strings.Contains(channel.Purpose, "shared_channel") {
 			json := channel.Channel.ToJson()
-			share := 
+			share := model.SharedChannelFromJson(strings.NewReader(json))
+			share.Home = true
+			share.ReadOnly = false
+			share.ShareName = share.Name
+			share.ShareDisplayName = share.DisplayName
+			share.URL = "share.cluster.com"
+			list = append(list, share)
 		}
 	}
 	return &list, nil

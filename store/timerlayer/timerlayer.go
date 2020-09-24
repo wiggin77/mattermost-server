@@ -1325,6 +1325,22 @@ func (s *TimerLayerChannelStore) GetPublicChannelsForTeam(teamId string, offset 
 	return result, err
 }
 
+func (s *TimerLayerChannelStore) GetSharedChannels() (*model.SharedChannelList, error) {
+	start := timemodule.Now()
+
+	result, err := s.ChannelStore.GetSharedChannels()
+
+	elapsed := float64(timemodule.Since(start)) / float64(timemodule.Second)
+	if s.Root.Metrics != nil {
+		success := "false"
+		if err == nil {
+			success = "true"
+		}
+		s.Root.Metrics.ObserveStoreMethodDuration("ChannelStore.GetSharedChannels", success, elapsed)
+	}
+	return result, err
+}
+
 func (s *TimerLayerChannelStore) GetSidebarCategories(userId string, teamId string) (*model.OrderedSidebarCategories, *model.AppError) {
 	start := timemodule.Now()
 

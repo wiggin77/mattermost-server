@@ -5,12 +5,16 @@ package sharedchannels
 
 import "github.com/mattermost/mattermost-server/v5/model"
 
+// ServerStore is a subset of `store.Store`
+type ServerStore interface {
+	Channel() ChannelStore
+	Post() PostStore
+}
+
 // ChannelStore is a subset of `store.ChannelStore`
 type ChannelStore interface {
-	// GetSharedChannels fetches all shared channels across all teams from the
-	// SharedChannels table (joined with Channels table).
-	// TODO:  mocked for now
-	GetSharedChannels() (*model.ChannelList, error)
+	// GetSharedChannels fetches all shared channels across all teams.
+	GetSharedChannels() (*model.SharedChannelList, error)
 }
 
 // PostStore is a subset of `store.PostStore`

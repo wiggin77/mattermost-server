@@ -1165,6 +1165,29 @@ func (_m *ChannelStore) GetPublicChannelsForTeam(teamId string, offset int, limi
 	return r0, r1
 }
 
+// GetSharedChannels provides a mock function with given fields:
+func (_m *ChannelStore) GetSharedChannels() (*model.SharedChannelList, error) {
+	ret := _m.Called()
+
+	var r0 *model.SharedChannelList
+	if rf, ok := ret.Get(0).(func() *model.SharedChannelList); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*model.SharedChannelList)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetSidebarCategories provides a mock function with given fields: userId, teamId
 func (_m *ChannelStore) GetSidebarCategories(userId string, teamId string) (*model.OrderedSidebarCategories, *model.AppError) {
 	ret := _m.Called(userId, teamId)

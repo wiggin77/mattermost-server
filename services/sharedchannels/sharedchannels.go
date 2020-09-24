@@ -4,11 +4,10 @@
 package sharedchannels
 
 import (
-	"errors"
 	"sync"
 
 	"github.com/mattermost/mattermost-server/v5/model"
-	v5_store "github.com/mattermost/mattermost-server/v5/store"
+	"github.com/wiggin77/merror"
 )
 
 type ServerIface interface {
@@ -16,7 +15,7 @@ type ServerIface interface {
 	IsLeader() bool
 	AddClusterLeaderChangedListener(listener func()) string
 	RemoveClusterLeaderChangedListener(id string)
-	GetStore() v5_store.Store
+	GetStore() ServerStore
 }
 
 type SyncService struct {
@@ -25,9 +24,10 @@ type SyncService struct {
 
 	store *store
 
-	mux          sync.Mutex
-	active       bool
-	clusterGroup []clusterGroup
+	mux            sync.Mutex
+	active         bool
+	homeChannels   []*homeChannel
+	remoteChannels []*remoteChannel
 }
 
 // NewService creates a service that synchronizes posts with another cluster (or stand-alone server).
@@ -38,8 +38,7 @@ func NewService(server ServerIface, pstore PostStore) (*SyncService, error) {
 	}
 	service.leaderListenerId = server.AddClusterLeaderChangedListener(service.onClusterLeaderChange)
 
-	var err error
-	if service.clusterGroup, err = service.buildClusterGroup(); err != nil {
+	if err := service.loadChannels(); err != nil {
 		return nil, err
 	}
 
@@ -85,10 +84,48 @@ func (ss *SyncService) stop() {
 	ss.active = false
 }
 
-// buildClusterGroup creates a clusterGroup array containing all
-// the remote clusters this server shares a channel with regardless of
-// where the channel is homed.
-func (ss *SyncService) buildClusterGroup() ([]clusterGroup, error) {
+// loadChannels loads all home and remote channels into the service.
+func (ss *SyncService) loadChannels() error {
+	merr := merror.New()
 
-	return nil, errors.New("not implemented yet")
+	list, err := ss.store.cstore.GetSharedChannels()
+	if err != nil {
+		return err
+	}
+	homeChannels := make([]*homeChannel, 0)
+	remoteChannels := make([]*remoteChannel, 0)
+
+	ss.mux.Lock()
+	defer ss.mux.Unlock()
+
+	for _, channel := range *list {
+		if channel.Home {
+			r, err := newRemote(channel.URL, ss.store)
+			if err != nil {
+				merr.Append(err)
+				continue
+			}
+			hc := &homeChannel{
+				channel: channel,
+				remotes: map[string]*remote{channel.URL: r},
+			}
+			homeChannels = append(homeChannels, hc)
+		} else {
+			r, err := newRemote(channel.URL, ss.store)
+			if err != nil {
+				merr.Append(err)
+				continue
+			}
+			rc := &remoteChannel{
+				channel: channel,
+				remote:  r,
+			}
+			remoteChannels = append(remoteChannels, rc)
+		}
+	}
+
+	ss.homeChannels = homeChannels
+	ss.remoteChannels = remoteChannels
+
+	return merr.ErrorOrNil()
 }
