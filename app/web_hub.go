@@ -186,6 +186,8 @@ func (s *Server) Publish(message *model.WebSocketEvent) {
 
 		s.Cluster.SendClusterMessage(cm)
 	}
+
+	s.sharedChannelService.OnEvent(message)
 }
 
 func (a *App) Publish(message *model.WebSocketEvent) {

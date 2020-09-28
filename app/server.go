@@ -43,6 +43,7 @@ import (
 	"github.com/mattermost/mattermost-server/v5/services/mailservice"
 	"github.com/mattermost/mattermost-server/v5/services/searchengine"
 	"github.com/mattermost/mattermost-server/v5/services/searchengine/bleveengine"
+	"github.com/mattermost/mattermost-server/v5/services/sharedchannels"
 	"github.com/mattermost/mattermost-server/v5/services/telemetry"
 	"github.com/mattermost/mattermost-server/v5/services/timezones"
 	"github.com/mattermost/mattermost-server/v5/services/tracing"
@@ -150,6 +151,8 @@ type Server struct {
 	Audit            *audit.Audit
 	Log              *mlog.Logger
 	NotificationsLog *mlog.Logger
+
+	sharedChannelService *sharedchannels.SyncService
 
 	joinCluster       bool
 	startMetrics      bool
@@ -506,6 +509,11 @@ func NewServer(options ...Option) (*Server, error) {
 
 	if s.startMetrics && s.Metrics != nil {
 		s.Metrics.StartServer()
+	}
+
+	s.sharedChannelService, err = sharedchannels.NewService(s)
+	if err != nil {
+		mlog.Error("Error starting shared channels sync service.", mlog.Err(err))
 	}
 
 	s.SearchEngine.UpdateConfig(s.Config())
@@ -1430,4 +1438,8 @@ func (s *Server) HttpService() httpservice.HTTPService {
 // allows interfaces to be created with subsets of server APIs.
 func (s *Server) GetStore() store.Store {
 	return s.Store
+}
+
+func (s *Server) GetLogger() *mlog.Logger {
+	return s.Log
 }

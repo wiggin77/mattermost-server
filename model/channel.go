@@ -119,6 +119,14 @@ type SharedChannel struct {
 	ShareToken       string `json:"sharetoken"`
 }
 
+type SharedChannelInvite struct {
+	Id          string `json:"id"`
+	Token       string `json:"token"`
+	Description string `json:"description"`
+	IsAccepted  bool   `json:"isaccepted"`
+	IsConfirmed bool   `json:"isconfirmed"`
+}
+
 // ChannelSearchOpts contains options for searching channels.
 //
 // NotAssociatedToGroup will exclude channels that have associated, active GroupChannels records.
@@ -386,6 +394,17 @@ func (o *SharedChannel) ToJson() string {
 
 func SharedChannelFromJson(data io.Reader) *SharedChannel {
 	var o *SharedChannel
+	json.NewDecoder(data).Decode(&o)
+	return o
+}
+
+func (o *SharedChannelInvite) ToJson() string {
+	b, _ := json.Marshal(o)
+	return string(b)
+}
+
+func SharedChannelInviteFromJson(data io.Reader) *SharedChannelInvite {
+	var o *SharedChannelInvite
 	json.NewDecoder(data).Decode(&o)
 	return o
 }

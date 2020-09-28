@@ -6,7 +6,9 @@ package sharedchannels
 import (
 	"sync"
 
+	"github.com/mattermost/mattermost-server/v5/mlog"
 	"github.com/mattermost/mattermost-server/v5/model"
+	v5_store "github.com/mattermost/mattermost-server/v5/store"
 	"github.com/wiggin77/merror"
 )
 
@@ -15,7 +17,8 @@ type ServerIface interface {
 	IsLeader() bool
 	AddClusterLeaderChangedListener(listener func()) string
 	RemoveClusterLeaderChangedListener(id string)
-	GetStore() ServerStore
+	GetStore() v5_store.Store
+	GetLogger() *mlog.Logger
 }
 
 type SyncService struct {
@@ -26,12 +29,12 @@ type SyncService struct {
 
 	mux            sync.Mutex
 	active         bool
-	homeChannels   []*homeChannel
-	remoteChannels []*remoteChannel
+	homeChannels   map[string]*homeChannel
+	remoteChannels map[string]*remoteChannel
 }
 
 // NewService creates a service that synchronizes posts with another cluster (or stand-alone server).
-func NewService(server ServerIface, pstore PostStore) (*SyncService, error) {
+func NewService(server ServerIface) (*SyncService, error) {
 	service := &SyncService{
 		server: server,
 		store:  newStore(server.GetStore().Post(), server.GetStore().Channel()),
@@ -41,6 +44,8 @@ func NewService(server ServerIface, pstore PostStore) (*SyncService, error) {
 	if err := service.loadChannels(); err != nil {
 		return nil, err
 	}
+
+	service.onClusterLeaderChange()
 
 	return service, nil
 }
@@ -70,6 +75,7 @@ func (ss *SyncService) start() {
 	}
 	ss.active = true
 
+	ss.server.GetLogger().Debug("Shared Channels Sync server active")
 }
 
 // stop deactivates synchronization of posts between clusters.
@@ -82,6 +88,8 @@ func (ss *SyncService) stop() {
 		return // already stopped
 	}
 	ss.active = false
+
+	ss.server.GetLogger().Debug("Shared Channels Sync server inactive")
 }
 
 // loadChannels loads all home and remote channels into the service.
@@ -92,8 +100,8 @@ func (ss *SyncService) loadChannels() error {
 	if err != nil {
 		return err
 	}
-	homeChannels := make([]*homeChannel, 0)
-	remoteChannels := make([]*remoteChannel, 0)
+	homeChannels := make(map[string]*homeChannel)
+	remoteChannels := make(map[string]*remoteChannel)
 
 	ss.mux.Lock()
 	defer ss.mux.Unlock()
@@ -109,7 +117,7 @@ func (ss *SyncService) loadChannels() error {
 				channel: channel,
 				remotes: map[string]*remote{channel.URL: r},
 			}
-			homeChannels = append(homeChannels, hc)
+			homeChannels[channel.Id] = hc
 		} else {
 			r, err := newRemote(channel.URL, ss.store)
 			if err != nil {
@@ -120,7 +128,7 @@ func (ss *SyncService) loadChannels() error {
 				channel: channel,
 				remote:  r,
 			}
-			remoteChannels = append(remoteChannels, rc)
+			remoteChannels[channel.Id] = rc
 		}
 	}
 
@@ -128,4 +136,26 @@ func (ss *SyncService) loadChannels() error {
 	ss.remoteChannels = remoteChannels
 
 	return merr.ErrorOrNil()
+}
+
+// OnEvent is called when a post or reaction is added to the local database.
+// This triggers a sync to any remote connections.
+func (ss *SyncService) OnEvent(event *model.WebSocketEvent) {
+	if !shouldHandleEventType(event) {
+		return
+	}
+
+	ss.server.GetLogger().Debug("Shared channels event received.", mlog.String("type", event.EventType()))
+}
+
+func shouldHandleEventType(event *model.WebSocketEvent) bool {
+	switch event.EventType() {
+	case model.WEBSOCKET_EVENT_POSTED,
+		model.WEBSOCKET_EVENT_POST_EDITED,
+		model.WEBSOCKET_EVENT_POST_DELETED,
+		model.WEBSOCKET_EVENT_REACTION_ADDED,
+		model.WEBSOCKET_EVENT_REACTION_REMOVED:
+		return true
+	}
+	return false
 }
