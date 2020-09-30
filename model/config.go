@@ -107,7 +107,7 @@ const (
 	TEAM_SETTINGS_DEFAULT_CUSTOM_DESCRIPTION_TEXT  = ""
 	TEAM_SETTINGS_DEFAULT_USER_STATUS_AWAY_TIMEOUT = 300
 
-	SQL_SETTINGS_DEFAULT_DATA_SOURCE = "mmuser:mostest@tcp(localhost:3306)/mattermost_test?charset=utf8mb4,utf8&readTimeout=30s&writeTimeout=30s"
+	SQL_SETTINGS_DEFAULT_DATA_SOURCE = "postgres://mmuser:mostest@localhost/mattermost_test?sslmode=disable&connect_timeout=10"
 
 	FILE_SETTINGS_DEFAULT_DIRECTORY = "./data/"
 
@@ -161,8 +161,10 @@ const (
 
 	ANALYTICS_SETTINGS_DEFAULT_MAX_USERS_FOR_STATISTICS = 2500
 
-	ANNOUNCEMENT_SETTINGS_DEFAULT_BANNER_COLOR      = "#f2a93b"
-	ANNOUNCEMENT_SETTINGS_DEFAULT_BANNER_TEXT_COLOR = "#333333"
+	ANNOUNCEMENT_SETTINGS_DEFAULT_BANNER_COLOR                    = "#f2a93b"
+	ANNOUNCEMENT_SETTINGS_DEFAULT_BANNER_TEXT_COLOR               = "#333333"
+	ANNOUNCEMENT_SETTINGS_DEFAULT_NOTICES_JSON_URL                = "https://notices.mattermost.com/"
+	ANNOUNCEMENT_SETTINGS_DEFAULT_NOTICES_FETCH_FREQUENCY_SECONDS = 3600
 
 	TEAM_SETTINGS_DEFAULT_TEAM_TEXT = "default"
 
@@ -1031,7 +1033,7 @@ type SqlSettings struct {
 
 func (s *SqlSettings) SetDefaults(isUpdate bool) {
 	if s.DriverName == nil {
-		s.DriverName = NewString(DATABASE_DRIVER_MYSQL)
+		s.DriverName = NewString(DATABASE_DRIVER_POSTGRES)
 	}
 
 	if s.DataSource == nil {
@@ -1667,13 +1669,16 @@ func (s *SupportSettings) SetDefaults() {
 }
 
 type AnnouncementSettings struct {
-	EnableBanner         *bool   `access:"site"`
-	BannerText           *string `access:"site"`
-	BannerColor          *string `access:"site"`
-	BannerTextColor      *string `access:"site"`
-	AllowBannerDismissal *bool   `access:"site"`
-	AdminNoticesEnabled  *bool   `access:"site"`
-	UserNoticesEnabled   *bool   `access:"site"`
+	EnableBanner          *bool   `access:"site"`
+	BannerText            *string `access:"site"`
+	BannerColor           *string `access:"site"`
+	BannerTextColor       *string `access:"site"`
+	AllowBannerDismissal  *bool   `access:"site"`
+	AdminNoticesEnabled   *bool   `access:"site"`
+	UserNoticesEnabled    *bool   `access:"site"`
+	NoticesURL            *string `access:"site,write_restrictable"`
+	NoticesFetchFrequency *int    `access:"site,write_restrictable"`
+	NoticesSkipCache      *bool   `access:"site,write_restrictable"`
 }
 
 func (s *AnnouncementSettings) SetDefaults() {
@@ -1704,6 +1709,16 @@ func (s *AnnouncementSettings) SetDefaults() {
 	if s.UserNoticesEnabled == nil {
 		s.UserNoticesEnabled = NewBool(true)
 	}
+	if s.NoticesURL == nil {
+		s.NoticesURL = NewString(ANNOUNCEMENT_SETTINGS_DEFAULT_NOTICES_JSON_URL)
+	}
+	if s.NoticesSkipCache == nil {
+		s.NoticesSkipCache = NewBool(false)
+	}
+	if s.NoticesFetchFrequency == nil {
+		s.NoticesFetchFrequency = NewInt(ANNOUNCEMENT_SETTINGS_DEFAULT_NOTICES_FETCH_FREQUENCY_SECONDS)
+	}
+
 }
 
 type ThemeSettings struct {
@@ -2867,6 +2882,7 @@ type Config struct {
 	GuestAccountsSettings     GuestAccountsSettings
 	ImageProxySettings        ImageProxySettings
 	CloudSettings             CloudSettings
+	FeatureFlags              *FeatureFlags `json:",omitempty"`
 }
 
 func (o *Config) Clone() *Config {
@@ -2954,6 +2970,10 @@ func (o *Config) SetDefaults() {
 	o.GuestAccountsSettings.SetDefaults()
 	o.ImageProxySettings.SetDefaults(o.ServiceSettings)
 	o.CloudSettings.SetDefaults()
+	if o.FeatureFlags == nil {
+		o.FeatureFlags = &FeatureFlags{}
+		o.FeatureFlags.SetDefaults()
+	}
 }
 
 func (o *Config) IsValid() *AppError {
