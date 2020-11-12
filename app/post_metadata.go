@@ -17,16 +17,23 @@ import (
 	"github.com/dyatlov/go-opengraph/opengraph"
 	"github.com/mattermost/mattermost-server/v5/mlog"
 	"github.com/mattermost/mattermost-server/v5/model"
-	"github.com/mattermost/mattermost-server/v5/services/cache/lru"
+	"github.com/mattermost/mattermost-server/v5/services/cache"
 	"github.com/mattermost/mattermost-server/v5/utils/imgutils"
 	"github.com/mattermost/mattermost-server/v5/utils/markdown"
 )
 
+type linkMetadataCache struct {
+	OpenGraph *opengraph.OpenGraph
+	PostImage *model.PostImage
+}
+
 const LINK_CACHE_SIZE = 10000
-const LINK_CACHE_DURATION = 3600
+const LINK_CACHE_DURATION = 1 * time.Hour
 const MaxMetadataImageSize = MaxOpenGraphResponseSize
 
-var linkCache = lru.New(LINK_CACHE_SIZE)
+var linkCache = cache.NewLRU(&cache.LRUOptions{
+	Size: LINK_CACHE_SIZE,
+})
 
 func (a *App) InitPostMetadata() {
 	// Dump any cached links if the proxy settings have changed so image URLs can be updated
@@ -64,11 +71,17 @@ func (a *App) OverrideIconURLIfEmoji(post *model.Post) {
 	if !ok || prop == nil {
 		return
 	}
-	emojiName := prop.(string)
+
+	emojiName, ok := prop.(string)
+	if !ok {
+		return
+	}
 
 	if !*a.Config().ServiceSettings.EnablePostIconOverride || emojiName == "" {
 		return
 	}
+
+	emojiName = strings.ReplaceAll(emojiName, ":", "")
 
 	if emojiUrl, err := a.GetEmojiStaticUrl(emojiName); err == nil {
 		post.AddProp(model.POST_PROPS_OVERRIDE_ICON_URL, emojiUrl)
@@ -88,7 +101,8 @@ func (a *App) PreparePostForClient(originalPost *model.Post, isNewPost bool, isE
 	post.Metadata = &model.PostMetadata{}
 
 	if post.DeleteAt > 0 {
-		// Don't fill out metadata for deleted posts
+		// For deleted posts we don't fill out metadata nor do we return the post content
+		post.Message = ""
 		return post
 	}
 
@@ -304,6 +318,10 @@ func getFirstLinkAndImages(str string) (string, []string) {
 			if firstLink == "" {
 				firstLink = v.Destination()
 			}
+		case *markdown.InlineLink:
+			if firstLink == "" {
+				firstLink = v.Destination()
+			}
 		case *markdown.InlineImage:
 			images = append(images, v.Destination())
 		case *markdown.ReferenceImage:
@@ -439,19 +457,13 @@ func resolveMetadataURL(requestURL string, siteURL string) string {
 }
 
 func getLinkMetadataFromCache(requestURL string, timestamp int64) (*opengraph.OpenGraph, *model.PostImage, bool) {
-	cached, ok := linkCache.Get(strconv.FormatInt(model.GenerateLinkMetadataHash(requestURL, timestamp), 16))
-	if !ok {
+	var cached linkMetadataCache
+	err := linkCache.Get(strconv.FormatInt(model.GenerateLinkMetadataHash(requestURL, timestamp), 16), &cached)
+	if err != nil {
 		return nil, nil, false
 	}
 
-	switch v := cached.(type) {
-	case *opengraph.OpenGraph:
-		return v, nil, true
-	case *model.PostImage:
-		return nil, v, true
-	default:
-		return nil, nil, true
-	}
+	return cached.OpenGraph, cached.PostImage, true
 }
 
 func (a *App) getLinkMetadataFromDatabase(requestURL string, timestamp int64) (*opengraph.OpenGraph, *model.PostImage, bool) {
@@ -495,14 +507,12 @@ func (a *App) saveLinkMetadataToDatabase(requestURL string, timestamp int64, og 
 }
 
 func cacheLinkMetadata(requestURL string, timestamp int64, og *opengraph.OpenGraph, image *model.PostImage) {
-	var val interface{}
-	if og != nil {
-		val = og
-	} else if image != nil {
-		val = image
+	metadata := linkMetadataCache{
+		OpenGraph: og,
+		PostImage: image,
 	}
 
-	linkCache.AddWithExpiresInSecs(strconv.FormatInt(model.GenerateLinkMetadataHash(requestURL, timestamp), 16), val, LINK_CACHE_DURATION)
+	linkCache.SetWithExpiry(strconv.FormatInt(model.GenerateLinkMetadataHash(requestURL, timestamp), 16), metadata, LINK_CACHE_DURATION)
 }
 
 func (a *App) parseLinkMetadata(requestURL string, body io.Reader, contentType string) (*opengraph.OpenGraph, *model.PostImage, error) {

@@ -97,7 +97,7 @@ func TestHookMessageWillBePosted(t *testing.T) {
 			Message:   "message_",
 			CreateAt:  model.GetMillis() - 10000,
 		}
-		_, err := th.App.CreatePost(post, th.BasicChannel, false)
+		_, err := th.App.CreatePost(post, th.BasicChannel, false, true)
 		if assert.NotNil(t, err) {
 			assert.Equal(t, "Post rejected by plugin. rejected", err.Message)
 		}
@@ -138,7 +138,7 @@ func TestHookMessageWillBePosted(t *testing.T) {
 			Message:   "message_",
 			CreateAt:  model.GetMillis() - 10000,
 		}
-		_, err := th.App.CreatePost(post, th.BasicChannel, false)
+		_, err := th.App.CreatePost(post, th.BasicChannel, false, true)
 		if assert.NotNil(t, err) {
 			assert.Equal(t, "Post rejected by plugin. rejected", err.Message)
 		}
@@ -178,7 +178,7 @@ func TestHookMessageWillBePosted(t *testing.T) {
 			Message:   "message",
 			CreateAt:  model.GetMillis() - 10000,
 		}
-		post, err := th.App.CreatePost(post, th.BasicChannel, false)
+		post, err := th.App.CreatePost(post, th.BasicChannel, false, true)
 		require.Nil(t, err)
 
 		assert.Equal(t, "message", post.Message)
@@ -222,7 +222,7 @@ func TestHookMessageWillBePosted(t *testing.T) {
 			Message:   "message",
 			CreateAt:  model.GetMillis() - 10000,
 		}
-		post, err := th.App.CreatePost(post, th.BasicChannel, false)
+		post, err := th.App.CreatePost(post, th.BasicChannel, false, true)
 		require.Nil(t, err)
 
 		assert.Equal(t, "message_fromplugin", post.Message)
@@ -288,7 +288,7 @@ func TestHookMessageWillBePosted(t *testing.T) {
 			Message:   "message",
 			CreateAt:  model.GetMillis() - 10000,
 		}
-		post, err := th.App.CreatePost(post, th.BasicChannel, false)
+		post, err := th.App.CreatePost(post, th.BasicChannel, false, true)
 		require.Nil(t, err)
 		assert.Equal(t, "prefix_message_suffix", post.Message)
 	})
@@ -332,7 +332,7 @@ func TestHookMessageHasBeenPosted(t *testing.T) {
 		Message:   "message",
 		CreateAt:  model.GetMillis() - 10000,
 	}
-	_, err := th.App.CreatePost(post, th.BasicChannel, false)
+	_, err := th.App.CreatePost(post, th.BasicChannel, false, true)
 	require.Nil(t, err)
 }
 
@@ -371,7 +371,7 @@ func TestHookMessageWillBeUpdated(t *testing.T) {
 		Message:   "message_",
 		CreateAt:  model.GetMillis() - 10000,
 	}
-	post, err := th.App.CreatePost(post, th.BasicChannel, false)
+	post, err := th.App.CreatePost(post, th.BasicChannel, false, true)
 	require.Nil(t, err)
 	assert.Equal(t, "message_", post.Message)
 	post.Message = post.Message + "edited_"
@@ -419,7 +419,7 @@ func TestHookMessageHasBeenUpdated(t *testing.T) {
 		Message:   "message_",
 		CreateAt:  model.GetMillis() - 10000,
 	}
-	post, err := th.App.CreatePost(post, th.BasicChannel, false)
+	post, err := th.App.CreatePost(post, th.BasicChannel, false, true)
 	require.Nil(t, err)
 	assert.Equal(t, "message_", post.Message)
 	post.Message = post.Message + "edited"
@@ -696,7 +696,7 @@ func TestUserWillLogIn_Blocked(t *testing.T) {
 
 	r := &http.Request{}
 	w := httptest.NewRecorder()
-	err = th.App.DoLogin(w, r, th.BasicUser, "")
+	err = th.App.DoLogin(w, r, th.BasicUser, "", false, false, false)
 
 	assert.Contains(t, err.Id, "Login rejected by plugin", "Expected Login rejected by plugin, got %s", err.Id)
 }
@@ -735,7 +735,7 @@ func TestUserWillLogInIn_Passed(t *testing.T) {
 
 	r := &http.Request{}
 	w := httptest.NewRecorder()
-	err = th.App.DoLogin(w, r, th.BasicUser, "")
+	err = th.App.DoLogin(w, r, th.BasicUser, "", false, false, false)
 
 	assert.Nil(t, err, "Expected nil, got %s", err)
 	assert.Equal(t, th.App.Session().UserId, th.BasicUser.Id)
@@ -776,7 +776,7 @@ func TestUserHasLoggedIn(t *testing.T) {
 
 	r := &http.Request{}
 	w := httptest.NewRecorder()
-	err = th.App.DoLogin(w, r, th.BasicUser, "")
+	err = th.App.DoLogin(w, r, th.BasicUser, "", false, false, false)
 
 	assert.Nil(t, err, "Expected nil, got %s", err)
 
@@ -788,7 +788,7 @@ func TestUserHasLoggedIn(t *testing.T) {
 }
 
 func TestUserHasBeenCreated(t *testing.T) {
-	th := Setup(t).InitBasic()
+	th := Setup(t)
 	defer th.TearDown()
 
 	tearDown, _, _ := SetAppEnvironmentWithPlugins(t,
@@ -834,7 +834,7 @@ func TestUserHasBeenCreated(t *testing.T) {
 }
 
 func TestErrorString(t *testing.T) {
-	th := Setup(t).InitBasic()
+	th := Setup(t)
 	defer th.TearDown()
 
 	t.Run("errors.New", func(t *testing.T) {
@@ -958,12 +958,12 @@ func TestHookContext(t *testing.T) {
 		Message:   "not this",
 		CreateAt:  model.GetMillis() - 10000,
 	}
-	_, err := th.App.CreatePost(post, th.BasicChannel, false)
+	_, err := th.App.CreatePost(post, th.BasicChannel, false, true)
 	require.Nil(t, err)
 }
 
 func TestActiveHooks(t *testing.T) {
-	th := Setup(t).InitBasic()
+	th := Setup(t)
 	defer th.TearDown()
 
 	t.Run("", func(t *testing.T) {
@@ -1034,7 +1034,7 @@ func TestActiveHooks(t *testing.T) {
 }
 
 func TestHookMetrics(t *testing.T) {
-	th := Setup(t).InitBasic()
+	th := Setup(t)
 	defer th.TearDown()
 
 	t.Run("", func(t *testing.T) {
@@ -1130,4 +1130,90 @@ func TestHookMetrics(t *testing.T) {
 
 		metricsMock.AssertExpectations(t)
 	})
+}
+
+func TestHookReactionHasBeenAdded(t *testing.T) {
+	th := Setup(t).InitBasic()
+	defer th.TearDown()
+
+	var mockAPI plugintest.API
+	mockAPI.On("LoadPluginConfiguration", mock.Anything).Return(nil)
+	mockAPI.On("LogDebug", "smile").Return(nil)
+
+	tearDown, _, _ := SetAppEnvironmentWithPlugins(t,
+		[]string{
+			`
+		package main
+
+		import (
+			"github.com/mattermost/mattermost-server/v5/plugin"
+			"github.com/mattermost/mattermost-server/v5/model"
+		)
+
+		type MyPlugin struct {
+			plugin.MattermostPlugin
+		}
+
+		func (p *MyPlugin) ReactionHasBeenAdded(c *plugin.Context, reaction *model.Reaction) {
+			p.API.LogDebug(reaction.EmojiName)
+		}
+
+		func main() {
+			plugin.ClientMain(&MyPlugin{})
+		}
+	`}, th.App, func(*model.Manifest) plugin.API { return &mockAPI })
+	defer tearDown()
+
+	reaction := &model.Reaction{
+		UserId:    th.BasicUser.Id,
+		PostId:    th.BasicPost.Id,
+		EmojiName: "smile",
+		CreateAt:  model.GetMillis() - 10000,
+	}
+	_, err := th.App.SaveReactionForPost(reaction)
+	require.Nil(t, err)
+}
+
+func TestHookReactionHasBeenRemoved(t *testing.T) {
+	th := Setup(t).InitBasic()
+	defer th.TearDown()
+
+	var mockAPI plugintest.API
+	mockAPI.On("LoadPluginConfiguration", mock.Anything).Return(nil)
+	mockAPI.On("LogDebug", "star").Return(nil)
+
+	tearDown, _, _ := SetAppEnvironmentWithPlugins(t,
+		[]string{
+			`
+		package main
+
+		import (
+			"github.com/mattermost/mattermost-server/v5/plugin"
+			"github.com/mattermost/mattermost-server/v5/model"
+		)
+
+		type MyPlugin struct {
+			plugin.MattermostPlugin
+		}
+
+		func (p *MyPlugin) ReactionHasBeenRemoved(c *plugin.Context, reaction *model.Reaction) {
+			p.API.LogDebug(reaction.EmojiName)
+		}
+
+		func main() {
+			plugin.ClientMain(&MyPlugin{})
+		}
+	`}, th.App, func(*model.Manifest) plugin.API { return &mockAPI })
+	defer tearDown()
+
+	reaction := &model.Reaction{
+		UserId:    th.BasicUser.Id,
+		PostId:    th.BasicPost.Id,
+		EmojiName: "star",
+		CreateAt:  model.GetMillis() - 10000,
+	}
+
+	err := th.App.DeleteReactionForPost(reaction)
+
+	require.Nil(t, err)
 }

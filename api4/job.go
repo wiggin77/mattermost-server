@@ -5,8 +5,12 @@ package api4
 
 import (
 	"net/http"
+	"path/filepath"
+	"strconv"
+	"time"
 
 	"github.com/mattermost/mattermost-server/v5/audit"
+	"github.com/mattermost/mattermost-server/v5/mlog"
 	"github.com/mattermost/mattermost-server/v5/model"
 )
 
@@ -14,6 +18,7 @@ func (api *API) InitJob() {
 	api.BaseRoutes.Jobs.Handle("", api.ApiSessionRequired(getJobs)).Methods("GET")
 	api.BaseRoutes.Jobs.Handle("", api.ApiSessionRequired(createJob)).Methods("POST")
 	api.BaseRoutes.Jobs.Handle("/{job_id:[A-Za-z0-9]+}", api.ApiSessionRequired(getJob)).Methods("GET")
+	api.BaseRoutes.Jobs.Handle("/{job_id:[A-Za-z0-9]+}/download", api.ApiSessionRequiredTrustRequester(downloadJob)).Methods("GET")
 	api.BaseRoutes.Jobs.Handle("/{job_id:[A-Za-z0-9]+}/cancel", api.ApiSessionRequired(cancelJob)).Methods("POST")
 	api.BaseRoutes.Jobs.Handle("/type/{job_type:[A-Za-z0-9_-]+}", api.ApiSessionRequired(getJobsByType)).Methods("GET")
 }
@@ -24,8 +29,8 @@ func getJob(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !c.App.SessionHasPermissionTo(*c.App.Session(), model.PERMISSION_MANAGE_JOBS) {
-		c.SetPermissionError(model.PERMISSION_MANAGE_JOBS)
+	if !c.App.SessionHasPermissionTo(*c.App.Session(), model.PERMISSION_READ_JOBS) {
+		c.SetPermissionError(model.PERMISSION_READ_JOBS)
 		return
 	}
 
@@ -36,6 +41,60 @@ func getJob(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Write([]byte(job.ToJson()))
+}
+
+func downloadJob(c *Context, w http.ResponseWriter, r *http.Request) {
+	config := c.App.Config()
+	const FILE_PATH = "export"
+	const FILE_MIME = "application/zip"
+
+	c.RequireJobId()
+	if c.Err != nil {
+		return
+	}
+
+	if !*config.MessageExportSettings.DownloadExportResults {
+		c.Err = model.NewAppError("downloadExportResultsNotEnabled", "app.job.download_export_results_not_enabled", nil, "", http.StatusNotImplemented)
+		return
+	}
+
+	if !c.App.SessionHasPermissionTo(*c.App.Session(), model.PERMISSION_READ_JOBS) {
+		c.SetPermissionError(model.PERMISSION_READ_JOBS)
+		return
+	}
+
+	job, err := c.App.GetJob(c.Params.JobId)
+	if err != nil {
+		mlog.Error(err.Error())
+		c.Err = err
+		return
+	}
+
+	isDownloadable, _ := strconv.ParseBool(job.Data["is_downloadable"])
+	if !isDownloadable {
+		c.Err = model.NewAppError("unableToDownloadJob", "api.job.unable_to_download_job", nil, "", http.StatusBadRequest)
+		return
+	}
+
+	fileName := job.Id + ".zip"
+	filePath := filepath.Join(FILE_PATH, fileName)
+	fileReader, err := c.App.FileReader(filePath)
+	if err != nil {
+		mlog.Error(err.Error())
+		c.Err = err
+		c.Err.StatusCode = http.StatusNotFound
+		return
+	}
+	defer fileReader.Close()
+
+	// We are able to pass 0 for content size due to the fact that Golang's serveContent (https://golang.org/src/net/http/fs.go)
+	// already sets that for us
+	err = writeFileResponse(fileName, FILE_MIME, 0, time.Unix(0, job.LastActivityAt*int64(1000*1000)), *c.App.Config().ServiceSettings.WebserverMode, fileReader, true, w, r)
+	if err != nil {
+		mlog.Error(err.Error())
+		c.Err = err
+		return
+	}
 }
 
 func createJob(c *Context, w http.ResponseWriter, r *http.Request) {
@@ -72,8 +131,8 @@ func getJobs(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !c.App.SessionHasPermissionTo(*c.App.Session(), model.PERMISSION_MANAGE_JOBS) {
-		c.SetPermissionError(model.PERMISSION_MANAGE_JOBS)
+	if !c.App.SessionHasPermissionTo(*c.App.Session(), model.PERMISSION_READ_JOBS) {
+		c.SetPermissionError(model.PERMISSION_READ_JOBS)
 		return
 	}
 
@@ -92,8 +151,8 @@ func getJobsByType(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !c.App.SessionHasPermissionTo(*c.App.Session(), model.PERMISSION_MANAGE_JOBS) {
-		c.SetPermissionError(model.PERMISSION_MANAGE_JOBS)
+	if !c.App.SessionHasPermissionTo(*c.App.Session(), model.PERMISSION_READ_JOBS) {
+		c.SetPermissionError(model.PERMISSION_READ_JOBS)
 		return
 	}
 

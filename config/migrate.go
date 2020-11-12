@@ -5,7 +5,7 @@ package config
 
 import "github.com/pkg/errors"
 
-// Migrate migrates SAML keys and certificates from one store to another given their data source names.
+// Migrate migrates SAML keys, certificates, and other config files from one store to another given their data source names.
 func Migrate(from, to string) error {
 	source, err := NewStore(from, false)
 	if err != nil {
@@ -30,6 +30,11 @@ func Migrate(from, to string) error {
 		*sourceConfig.SamlSettings.PrivateKeyFile,
 	}
 
+	// Only migrate advanced logging config if it is not embedded JSON.
+	if !IsJsonMap(*sourceConfig.LogSettings.AdvancedLoggingConfig) {
+		files = append(files, *sourceConfig.LogSettings.AdvancedLoggingConfig)
+	}
+
 	files = append(files, sourceConfig.PluginSettings.SignaturePublicKeyFiles...)
 
 	for _, file := range files {
@@ -41,7 +46,7 @@ func Migrate(from, to string) error {
 	return nil
 }
 
-func migrateFile(name string, source Store, destination Store) error {
+func migrateFile(name string, source *Store, destination *Store) error {
 	fileExists, err := source.HasFile(name)
 	if err != nil {
 		return errors.Wrapf(err, "failed to check existence of %s", name)

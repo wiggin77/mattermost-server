@@ -63,7 +63,7 @@ func TestWebSocket(t *testing.T) {
 }
 
 func TestWebSocketTrailingSlash(t *testing.T) {
-	th := Setup(t).InitBasic()
+	th := Setup(t)
 	defer th.TearDown()
 
 	url := fmt.Sprintf("ws://localhost:%v", th.App.Srv().ListenAddr.Port)
@@ -196,7 +196,7 @@ func TestCreateDirectChannelWithSocket(t *testing.T) {
 }
 
 func TestWebsocketOriginSecurity(t *testing.T) {
-	th := Setup(t).InitBasic()
+	th := Setup(t)
 	defer th.TearDown()
 
 	url := fmt.Sprintf("ws://localhost:%v", th.App.Srv().ListenAddr.Port)
@@ -264,14 +264,14 @@ func TestWebSocketStatuses(t *testing.T) {
 	user := model.User{Email: strings.ToLower(model.NewId()) + "success+test@simulator.amazonses.com", Nickname: "Corey Hulen", Password: "passwd1"}
 	ruser := Client.Must(Client.CreateUser(&user)).(*model.User)
 	th.LinkUserToTeam(ruser, rteam)
-	_, err = th.App.Srv().Store.User().VerifyEmail(ruser.Id, ruser.Email)
-	require.Nil(t, err)
+	_, nErr := th.App.Srv().Store.User().VerifyEmail(ruser.Id, ruser.Email)
+	require.Nil(t, nErr)
 
 	user2 := model.User{Email: strings.ToLower(model.NewId()) + "success+test@simulator.amazonses.com", Nickname: "Corey Hulen", Password: "passwd1"}
 	ruser2 := Client.Must(Client.CreateUser(&user2)).(*model.User)
 	th.LinkUserToTeam(ruser2, rteam)
-	_, err = th.App.Srv().Store.User().VerifyEmail(ruser2.Id, ruser2.Email)
-	require.Nil(t, err)
+	_, nErr = th.App.Srv().Store.User().VerifyEmail(ruser2.Id, ruser2.Email)
+	require.Nil(t, nErr)
 
 	Client.Login(user.Email, user.Password)
 

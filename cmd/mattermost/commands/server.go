@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 
 	"github.com/mattermost/mattermost-server/v5/api4"
@@ -17,7 +18,6 @@ import (
 	"github.com/mattermost/mattermost-server/v5/utils"
 	"github.com/mattermost/mattermost-server/v5/web"
 	"github.com/mattermost/mattermost-server/v5/wsapi"
-	"github.com/mattermost/viper"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -35,8 +35,6 @@ func init() {
 }
 
 func serverCmdF(command *cobra.Command, args []string) error {
-	configDSN := viper.GetString("config")
-
 	disableConfigWatch, _ := command.Flags().GetBool("disableconfigwatch")
 	usedPlatform, _ := command.Flags().GetBool("platform")
 
@@ -45,15 +43,20 @@ func serverCmdF(command *cobra.Command, args []string) error {
 	if err := utils.TranslationsPreInit(); err != nil {
 		return errors.Wrapf(err, "unable to load Mattermost translation files")
 	}
-	configStore, err := config.NewStore(configDSN, !disableConfigWatch)
+	configStore, err := config.NewStore(getConfigDSN(command, config.GetEnvironment()), !disableConfigWatch)
 	if err != nil {
 		return errors.Wrap(err, "failed to load configuration")
 	}
 
-	return runServer(configStore, disableConfigWatch, usedPlatform, interruptChan)
+	return runServer(configStore, usedPlatform, interruptChan)
 }
 
-func runServer(configStore config.Store, disableConfigWatch bool, usedPlatform bool, interruptChan chan os.Signal) error {
+func runServer(configStore *config.Store, usedPlatform bool, interruptChan chan os.Signal) error {
+	// Setting the highest traceback level from the code.
+	// This is done to print goroutines from all threads (see golang.org/issue/13161)
+	// and also preserve a crash dump for later investigation.
+	debug.SetTraceback("crash")
+
 	options := []app.Option{
 		app.ConfigStore(configStore),
 		app.RunJobs,
@@ -73,7 +76,7 @@ func runServer(configStore config.Store, disableConfigWatch bool, usedPlatform b
 	}
 
 	api := api4.Init(server, server.AppOptions, server.Router)
-	wsapi.Init(server.FakeApp(), server.WebSocketRouter)
+	wsapi.Init(server)
 	web.New(server, server.AppOptions, server.Router)
 	api4.InitLocal(server, server.AppOptions, server.LocalRouter)
 
@@ -92,7 +95,7 @@ func runServer(configStore config.Store, disableConfigWatch bool, usedPlatform b
 
 	// wait for kill signal before attempting to gracefully shutdown
 	// the running service
-	signal.Notify(interruptChan, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(interruptChan, syscall.SIGINT, syscall.SIGTERM)
 	<-interruptChan
 
 	return nil

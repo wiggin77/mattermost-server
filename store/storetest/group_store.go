@@ -81,12 +81,13 @@ func TestGroupStore(t *testing.T, ss store.Store) {
 	t.Run("GroupChannelCount", func(t *testing.T) { groupTestGroupChannelCount(t, ss) })
 	t.Run("GroupMemberCount", func(t *testing.T) { groupTestGroupMemberCount(t, ss) })
 	t.Run("DistinctGroupMemberCount", func(t *testing.T) { groupTestDistinctGroupMemberCount(t, ss) })
+	t.Run("GroupCountWithAllowReference", func(t *testing.T) { groupTestGroupCountWithAllowReference(t, ss) })
 }
 
 func testGroupStoreCreate(t *testing.T, ss store.Store) {
 	// Save a new group
 	g1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		Description: model.NewId(),
@@ -97,7 +98,7 @@ func testGroupStoreCreate(t *testing.T, ss store.Store) {
 	d1, err := ss.Group().Create(g1)
 	require.Nil(t, err)
 	require.Len(t, d1.Id, 26)
-	require.Equal(t, g1.Name, d1.Name)
+	require.Equal(t, *g1.Name, *d1.Name)
 	require.Equal(t, g1.DisplayName, d1.DisplayName)
 	require.Equal(t, g1.Description, d1.Description)
 	require.Equal(t, g1.RemoteId, d1.RemoteId)
@@ -105,28 +106,21 @@ func testGroupStoreCreate(t *testing.T, ss store.Store) {
 	require.NotZero(t, d1.UpdateAt)
 	require.Zero(t, d1.DeleteAt)
 
-	// Requires name and display name
+	// Requires display name
 	g2 := &model.Group{
-		Name:        "",
-		DisplayName: model.NewId(),
+		Name:        model.NewString(model.NewId()),
+		DisplayName: "",
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
 	}
 	data, err := ss.Group().Create(g2)
 	require.Nil(t, data)
 	require.NotNil(t, err)
-	require.Equal(t, err.Id, "model.group.name.app_error")
-
-	g2.Name = model.NewId()
-	g2.DisplayName = ""
-	data, err = ss.Group().Create(g2)
-	require.Nil(t, data)
-	require.NotNil(t, err)
 	require.Equal(t, err.Id, "model.group.display_name.app_error")
 
 	// Won't accept a duplicate name
 	g4 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
@@ -145,7 +139,7 @@ func testGroupStoreCreate(t *testing.T, ss store.Store) {
 
 	// Fields cannot be greater than max values
 	g5 := &model.Group{
-		Name:        strings.Repeat("x", model.GroupNameMaxLength),
+		Name:        model.NewString(strings.Repeat("x", model.GroupNameMaxLength)),
 		DisplayName: strings.Repeat("x", model.GroupDisplayNameMaxLength),
 		Description: strings.Repeat("x", model.GroupDescriptionMaxLength),
 		Source:      model.GroupSourceLdap,
@@ -153,9 +147,9 @@ func testGroupStoreCreate(t *testing.T, ss store.Store) {
 	}
 	require.Nil(t, g5.IsValidForCreate())
 
-	g5.Name = g5.Name + "x"
-	require.Equal(t, g5.IsValidForCreate().Id, "model.group.name.app_error")
-	g5.Name = model.NewId()
+	g5.Name = model.NewString(*g5.Name + "x")
+	require.Equal(t, g5.IsValidForCreate().Id, "model.group.name.invalid_length.app_error")
+	g5.Name = model.NewString(model.NewId())
 	require.Nil(t, g5.IsValidForCreate())
 
 	g5.DisplayName = g5.DisplayName + "x"
@@ -170,7 +164,7 @@ func testGroupStoreCreate(t *testing.T, ss store.Store) {
 
 	// Must use a valid type
 	g6 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Description: model.NewId(),
 		Source:      model.GroupSource("fake"),
@@ -180,7 +174,7 @@ func testGroupStoreCreate(t *testing.T, ss store.Store) {
 
 	//must use valid characters
 	g7 := &model.Group{
-		Name:        "%^#@$$",
+		Name:        model.NewString("%^#@$$"),
 		DisplayName: model.NewId(),
 		Description: model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -192,7 +186,7 @@ func testGroupStoreCreate(t *testing.T, ss store.Store) {
 func testGroupStoreGet(t *testing.T, ss store.Store) {
 	// Create a group
 	g1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Description: model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -206,7 +200,7 @@ func testGroupStoreGet(t *testing.T, ss store.Store) {
 	d2, err := ss.Group().Get(d1.Id)
 	require.Nil(t, err)
 	require.Equal(t, d1.Id, d2.Id)
-	require.Equal(t, d1.Name, d2.Name)
+	require.Equal(t, *d1.Name, *d2.Name)
 	require.Equal(t, d1.DisplayName, d2.DisplayName)
 	require.Equal(t, d1.Description, d2.Description)
 	require.Equal(t, d1.RemoteId, d2.RemoteId)
@@ -223,7 +217,7 @@ func testGroupStoreGet(t *testing.T, ss store.Store) {
 func testGroupStoreGetByName(t *testing.T, ss store.Store) {
 	// Create a group
 	g1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Description: model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -238,10 +232,10 @@ func testGroupStoreGetByName(t *testing.T, ss store.Store) {
 	require.Len(t, d1.Id, 26)
 
 	// Get the group
-	d2, err := ss.Group().GetByName(d1.Name, g1Opts)
+	d2, err := ss.Group().GetByName(*d1.Name, g1Opts)
 	require.Nil(t, err)
 	require.Equal(t, d1.Id, d2.Id)
-	require.Equal(t, d1.Name, d2.Name)
+	require.Equal(t, *d1.Name, *d2.Name)
 	require.Equal(t, d1.DisplayName, d2.DisplayName)
 	require.Equal(t, d1.Description, d2.Description)
 	require.Equal(t, d1.RemoteId, d2.RemoteId)
@@ -261,7 +255,7 @@ func testGroupStoreGetByIDs(t *testing.T, ss store.Store) {
 
 	for i := 0; i < 2; i++ {
 		group := &model.Group{
-			Name:        model.NewId(),
+			Name:        model.NewString(model.NewId()),
 			DisplayName: model.NewId(),
 			Description: model.NewId(),
 			Source:      model.GroupSourceLdap,
@@ -291,7 +285,7 @@ func testGroupStoreGetByIDs(t *testing.T, ss store.Store) {
 func testGroupStoreGetByRemoteID(t *testing.T, ss store.Store) {
 	// Create a group
 	g1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Description: model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -305,7 +299,7 @@ func testGroupStoreGetByRemoteID(t *testing.T, ss store.Store) {
 	d2, err := ss.Group().GetByRemoteID(d1.RemoteId, model.GroupSourceLdap)
 	require.Nil(t, err)
 	require.Equal(t, d1.Id, d2.Id)
-	require.Equal(t, d1.Name, d2.Name)
+	require.Equal(t, *d1.Name, *d2.Name)
 	require.Equal(t, d1.DisplayName, d2.DisplayName)
 	require.Equal(t, d1.Description, d2.Description)
 	require.Equal(t, d1.RemoteId, d2.RemoteId)
@@ -327,7 +321,7 @@ func testGroupStoreGetAllByType(t *testing.T, ss store.Store) {
 	// Create groups
 	for i := 0; i < numGroups; i++ {
 		g := &model.Group{
-			Name:        model.NewId(),
+			Name:        model.NewString(model.NewId()),
 			DisplayName: model.NewId(),
 			Description: model.NewId(),
 			Source:      model.GroupSourceLdap,
@@ -357,7 +351,7 @@ func testGroupStoreGetAllByType(t *testing.T, ss store.Store) {
 func testGroupStoreGetByUser(t *testing.T, ss store.Store) {
 	// Save a group
 	g1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Description: model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -367,7 +361,7 @@ func testGroupStoreGetByUser(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	g2 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Description: model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -380,8 +374,8 @@ func testGroupStoreGetByUser(t *testing.T, ss store.Store) {
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	u1, err = ss.User().Save(u1)
-	require.Nil(t, err)
+	u1, nErr := ss.User().Save(u1)
+	require.Nil(t, nErr)
 
 	_, err = ss.Group().UpsertMember(g1.Id, u1.Id)
 	require.Nil(t, err)
@@ -392,8 +386,8 @@ func testGroupStoreGetByUser(t *testing.T, ss store.Store) {
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	u2, err = ss.User().Save(u2)
-	require.Nil(t, err)
+	u2, nErr = ss.User().Save(u2)
+	require.Nil(t, nErr)
 
 	_, err = ss.Group().UpsertMember(g2.Id, u2.Id)
 	require.Nil(t, err)
@@ -427,7 +421,7 @@ func testGroupStoreGetByUser(t *testing.T, ss store.Store) {
 func testGroupStoreUpdate(t *testing.T, ss store.Store) {
 	// Save a new group
 	g1 := &model.Group{
-		Name:        "g1-test",
+		Name:        model.NewString("g1-test"),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		Description: model.NewId(),
@@ -441,7 +435,7 @@ func testGroupStoreUpdate(t *testing.T, ss store.Store) {
 	// Update happy path
 	g1Update := &model.Group{}
 	*g1Update = *g1
-	g1Update.Name = model.NewId()
+	g1Update.Name = model.NewString(model.NewId())
 	g1Update.DisplayName = model.NewId()
 	g1Update.Description = model.NewId()
 	g1Update.RemoteId = model.NewId()
@@ -455,27 +449,15 @@ func testGroupStoreUpdate(t *testing.T, ss store.Store) {
 	// Still zero...
 	require.Zero(t, ud1.DeleteAt)
 	// Updated...
-	require.Equal(t, g1Update.Name, ud1.Name)
+	require.Equal(t, *g1Update.Name, *ud1.Name)
 	require.Equal(t, g1Update.DisplayName, ud1.DisplayName)
 	require.Equal(t, g1Update.Description, ud1.Description)
 	require.Equal(t, g1Update.RemoteId, ud1.RemoteId)
 
-	// Requires name and display name
+	// Requires display name
 	data, err := ss.Group().Update(&model.Group{
 		Id:          d1.Id,
-		Name:        "",
-		DisplayName: model.NewId(),
-		Source:      model.GroupSourceLdap,
-		RemoteId:    model.NewId(),
-		Description: model.NewId(),
-	})
-	require.Nil(t, data)
-	require.NotNil(t, err)
-	require.Equal(t, err.Id, "model.group.name.app_error")
-
-	data, err = ss.Group().Update(&model.Group{
-		Id:          d1.Id,
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: "",
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
@@ -486,7 +468,7 @@ func testGroupStoreUpdate(t *testing.T, ss store.Store) {
 
 	// Create another Group
 	g2 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		Description: model.NewId(),
@@ -528,7 +510,7 @@ func testGroupStoreUpdate(t *testing.T, ss store.Store) {
 func testGroupStoreDelete(t *testing.T, ss store.Store) {
 	// Save a group
 	g1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Description: model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -576,7 +558,7 @@ func testGroupStoreDelete(t *testing.T, ss store.Store) {
 func testGroupGetMemberUsers(t *testing.T, ss store.Store) {
 	// Save a group
 	g1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Description: model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -589,8 +571,8 @@ func testGroupGetMemberUsers(t *testing.T, ss store.Store) {
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	user1, err := ss.User().Save(u1)
-	require.Nil(t, err)
+	user1, nErr := ss.User().Save(u1)
+	require.Nil(t, nErr)
 
 	_, err = ss.Group().UpsertMember(group.Id, user1.Id)
 	require.Nil(t, err)
@@ -599,8 +581,8 @@ func testGroupGetMemberUsers(t *testing.T, ss store.Store) {
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	user2, err := ss.User().Save(u2)
-	require.Nil(t, err)
+	user2, nErr := ss.User().Save(u2)
+	require.Nil(t, nErr)
 
 	_, err = ss.Group().UpsertMember(group.Id, user2.Id)
 	require.Nil(t, err)
@@ -628,7 +610,7 @@ func testGroupGetMemberUsers(t *testing.T, ss store.Store) {
 func testGroupGetMemberUsersPage(t *testing.T, ss store.Store) {
 	// Save a group
 	g1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Description: model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -641,8 +623,8 @@ func testGroupGetMemberUsersPage(t *testing.T, ss store.Store) {
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	user1, err := ss.User().Save(u1)
-	require.Nil(t, err)
+	user1, nErr := ss.User().Save(u1)
+	require.Nil(t, nErr)
 
 	_, err = ss.Group().UpsertMember(group.Id, user1.Id)
 	require.Nil(t, err)
@@ -651,8 +633,8 @@ func testGroupGetMemberUsersPage(t *testing.T, ss store.Store) {
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	user2, err := ss.User().Save(u2)
-	require.Nil(t, err)
+	user2, nErr := ss.User().Save(u2)
+	require.Nil(t, nErr)
 
 	_, err = ss.Group().UpsertMember(group.Id, user2.Id)
 	require.Nil(t, err)
@@ -661,8 +643,8 @@ func testGroupGetMemberUsersPage(t *testing.T, ss store.Store) {
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	user3, err := ss.User().Save(u3)
-	require.Nil(t, err)
+	user3, nErr := ss.User().Save(u3)
+	require.Nil(t, nErr)
 
 	_, err = ss.Group().UpsertMember(group.Id, user3.Id)
 	require.Nil(t, err)
@@ -715,7 +697,7 @@ func testGroupGetMemberUsersInTeam(t *testing.T, ss store.Store) {
 
 	// Save a group
 	g1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Description: model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -765,8 +747,8 @@ func testGroupGetMemberUsersInTeam(t *testing.T, ss store.Store) {
 	require.Equal(t, 0, len(groupMembers))
 
 	m1 := &model.TeamMember{TeamId: team.Id, UserId: user1.Id}
-	_, err = ss.Team().SaveMember(m1, -1)
-	require.Nil(t, err)
+	_, nErr := ss.Team().SaveMember(m1, -1)
+	require.Nil(t, nErr)
 
 	// returns single member in team
 	groupMembers, err = ss.Group().GetMemberUsersInTeam(group.Id, team.Id)
@@ -775,10 +757,10 @@ func testGroupGetMemberUsersInTeam(t *testing.T, ss store.Store) {
 
 	m2 := &model.TeamMember{TeamId: team.Id, UserId: user2.Id}
 	m3 := &model.TeamMember{TeamId: team.Id, UserId: user3.Id}
-	_, err = ss.Team().SaveMember(m2, -1)
-	require.Nil(t, err)
-	_, err = ss.Team().SaveMember(m3, -1)
-	require.Nil(t, err)
+	_, nErr = ss.Team().SaveMember(m2, -1)
+	require.Nil(t, nErr)
+	_, nErr = ss.Team().SaveMember(m3, -1)
+	require.Nil(t, nErr)
 
 	// returns all members when all members are in team
 	groupMembers, err = ss.Group().GetMemberUsersInTeam(group.Id, team.Id)
@@ -801,7 +783,7 @@ func testGroupGetMemberUsersNotInChannel(t *testing.T, ss store.Store) {
 
 	// Save a group
 	g1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Description: model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -861,8 +843,8 @@ func testGroupGetMemberUsersNotInChannel(t *testing.T, ss store.Store) {
 	require.Equal(t, 0, len(groupMembers))
 
 	m1 := &model.TeamMember{TeamId: team.Id, UserId: user1.Id}
-	_, err = ss.Team().SaveMember(m1, -1)
-	require.Nil(t, err)
+	_, nErr = ss.Team().SaveMember(m1, -1)
+	require.Nil(t, nErr)
 
 	// returns single member in team and not in channel
 	groupMembers, err = ss.Group().GetMemberUsersNotInChannel(group.Id, channel.Id)
@@ -871,10 +853,10 @@ func testGroupGetMemberUsersNotInChannel(t *testing.T, ss store.Store) {
 
 	m2 := &model.TeamMember{TeamId: team.Id, UserId: user2.Id}
 	m3 := &model.TeamMember{TeamId: team.Id, UserId: user3.Id}
-	_, err = ss.Team().SaveMember(m2, -1)
-	require.Nil(t, err)
-	_, err = ss.Team().SaveMember(m3, -1)
-	require.Nil(t, err)
+	_, nErr = ss.Team().SaveMember(m2, -1)
+	require.Nil(t, nErr)
+	_, nErr = ss.Team().SaveMember(m3, -1)
+	require.Nil(t, nErr)
 
 	// returns all members when all members are in team and not in channel
 	groupMembers, err = ss.Group().GetMemberUsersNotInChannel(group.Id, channel.Id)
@@ -928,7 +910,7 @@ func testGroupGetMemberUsersNotInChannel(t *testing.T, ss store.Store) {
 func testUpsertMember(t *testing.T, ss store.Store) {
 	// Create group
 	g1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
@@ -941,8 +923,8 @@ func testUpsertMember(t *testing.T, ss store.Store) {
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	user, err := ss.User().Save(u1)
-	require.Nil(t, err)
+	user, nErr := ss.User().Save(u1)
+	require.Nil(t, nErr)
 
 	// Happy path
 	d2, err := ss.Group().UpsertMember(group.Id, user.Id)
@@ -986,7 +968,7 @@ func testUpsertMember(t *testing.T, ss store.Store) {
 func testGroupDeleteMember(t *testing.T, ss store.Store) {
 	// Create group
 	g1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
@@ -999,8 +981,8 @@ func testGroupDeleteMember(t *testing.T, ss store.Store) {
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	user, err := ss.User().Save(u1)
-	require.Nil(t, err)
+	user, nErr := ss.User().Save(u1)
+	require.Nil(t, nErr)
 
 	// Create member
 	d1, err := ss.Group().UpsertMember(group.Id, user.Id)
@@ -1034,7 +1016,7 @@ func testGroupPermanentDeleteMembersByUser(t *testing.T, ss store.Store) {
 
 	for i := 0; i < numberOfGroups; i++ {
 		g = &model.Group{
-			Name:        model.NewId(),
+			Name:        model.NewString(model.NewId()),
 			DisplayName: model.NewId(),
 			Source:      model.GroupSourceLdap,
 			RemoteId:    model.NewId(),
@@ -1070,7 +1052,7 @@ func testCreateGroupSyncable(t *testing.T, ss store.Store) {
 
 	// Create Group
 	g1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
@@ -1089,8 +1071,8 @@ func testCreateGroupSyncable(t *testing.T, ss store.Store) {
 		Email:           "success+" + model.NewId() + "@simulator.amazonses.com",
 		Type:            model.TEAM_OPEN,
 	}
-	team, err := ss.Team().Save(t1)
-	require.Nil(t, err)
+	team, nErr := ss.Team().Save(t1)
+	require.Nil(t, nErr)
 
 	// New GroupSyncable, happy path
 	gt1 := model.NewGroupTeam(group.Id, team.Id, false)
@@ -1106,7 +1088,7 @@ func testCreateGroupSyncable(t *testing.T, ss store.Store) {
 func testGetGroupSyncable(t *testing.T, ss store.Store) {
 	// Create a group
 	g1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Description: model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -1126,8 +1108,8 @@ func testGetGroupSyncable(t *testing.T, ss store.Store) {
 		Email:           "success+" + model.NewId() + "@simulator.amazonses.com",
 		Type:            model.TEAM_OPEN,
 	}
-	team, err := ss.Team().Save(t1)
-	require.Nil(t, err)
+	team, nErr := ss.Team().Save(t1)
+	require.Nil(t, nErr)
 
 	// Create GroupSyncable
 	gt1 := model.NewGroupTeam(group.Id, team.Id, false)
@@ -1150,7 +1132,7 @@ func testGetAllGroupSyncablesByGroup(t *testing.T, ss store.Store) {
 
 	// Create group
 	g := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Description: model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -1175,8 +1157,8 @@ func testGetAllGroupSyncablesByGroup(t *testing.T, ss store.Store) {
 			Type:            model.TEAM_OPEN,
 		}
 		var team *model.Team
-		team, err = ss.Team().Save(t1)
-		require.Nil(t, err)
+		team, nErr := ss.Team().Save(t1)
+		require.Nil(t, nErr)
 
 		// create groupteam
 		var groupTeam *model.GroupSyncable
@@ -1207,7 +1189,7 @@ func testGetAllGroupSyncablesByGroup(t *testing.T, ss store.Store) {
 func testUpdateGroupSyncable(t *testing.T, ss store.Store) {
 	// Create Group
 	g1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
@@ -1226,8 +1208,8 @@ func testUpdateGroupSyncable(t *testing.T, ss store.Store) {
 		Email:           "success+" + model.NewId() + "@simulator.amazonses.com",
 		Type:            model.TEAM_OPEN,
 	}
-	team, err := ss.Team().Save(t1)
-	require.Nil(t, err)
+	team, nErr := ss.Team().Save(t1)
+	require.Nil(t, nErr)
 
 	// New GroupSyncable, happy path
 	gt1 := model.NewGroupTeam(group.Id, team.Id, false)
@@ -1273,7 +1255,7 @@ func testUpdateGroupSyncable(t *testing.T, ss store.Store) {
 func testDeleteGroupSyncable(t *testing.T, ss store.Store) {
 	// Create Group
 	g1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
@@ -1292,8 +1274,8 @@ func testDeleteGroupSyncable(t *testing.T, ss store.Store) {
 		Email:           "success+" + model.NewId() + "@simulator.amazonses.com",
 		Type:            model.TEAM_OPEN,
 	}
-	team, err := ss.Team().Save(t1)
-	require.Nil(t, err)
+	team, nErr := ss.Team().Save(t1)
+	require.Nil(t, nErr)
 
 	// Create GroupSyncable
 	gt1 := model.NewGroupTeam(group.Id, team.Id, false)
@@ -1327,7 +1309,7 @@ func testDeleteGroupSyncable(t *testing.T, ss store.Store) {
 func testTeamMembersToAdd(t *testing.T, ss store.Store) {
 	// Create Group
 	group, err := ss.Group().Create(&model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: "TeamMembersToAdd Test Group",
 		RemoteId:    model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -1339,8 +1321,8 @@ func testTeamMembersToAdd(t *testing.T, ss store.Store) {
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	user, err = ss.User().Save(user)
-	require.Nil(t, err)
+	user, nErr := ss.User().Save(user)
+	require.Nil(t, nErr)
 
 	// Create GroupMember
 	_, err = ss.Group().UpsertMember(group.Id, user.Id)
@@ -1357,8 +1339,8 @@ func testTeamMembersToAdd(t *testing.T, ss store.Store) {
 		Email:           "success+" + model.NewId() + "@simulator.amazonses.com",
 		Type:            model.TEAM_OPEN,
 	}
-	team, err = ss.Team().Save(team)
-	require.Nil(t, err)
+	team, nErr = ss.Team().Save(team)
+	require.Nil(t, nErr)
 
 	// Create GroupTeam
 	syncable, err := ss.Group().CreateGroupSyncable(model.NewGroupTeam(group.Id, team.Id, true))
@@ -1434,16 +1416,16 @@ func testTeamMembersToAdd(t *testing.T, ss store.Store) {
 
 	// No result if Team deleted
 	team.DeleteAt = model.GetMillis()
-	team, err = ss.Team().Update(team)
-	require.Nil(t, err)
+	team, nErr = ss.Team().Update(team)
+	require.Nil(t, nErr)
 	teamMembers, err = ss.Group().TeamMembersToAdd(0, nil)
 	require.Nil(t, err)
 	require.Empty(t, teamMembers)
 
 	// reset state of team and verify
 	team.DeleteAt = 0
-	team, err = ss.Team().Update(team)
-	require.Nil(t, err)
+	team, nErr = ss.Team().Update(team)
+	require.Nil(t, nErr)
 	teamMembers, err = ss.Group().TeamMembersToAdd(0, nil)
 	require.Nil(t, err)
 	require.Len(t, teamMembers, 1)
@@ -1477,11 +1459,11 @@ func testTeamMembersToAdd(t *testing.T, ss store.Store) {
 	require.Len(t, teamMembers, 1)
 
 	// adding team membership stops returning result
-	_, err = ss.Team().SaveMember(&model.TeamMember{
+	_, nErr = ss.Team().SaveMember(&model.TeamMember{
 		TeamId: team.Id,
 		UserId: user.Id,
 	}, 999)
-	require.Nil(t, err)
+	require.Nil(t, nErr)
 	teamMembers, err = ss.Group().TeamMembersToAdd(0, nil)
 	require.Nil(t, err)
 	require.Empty(t, teamMembers)
@@ -1489,7 +1471,7 @@ func testTeamMembersToAdd(t *testing.T, ss store.Store) {
 
 func testTeamMembersToAddSingleTeam(t *testing.T, ss store.Store) {
 	group1, err := ss.Group().Create(&model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: "TeamMembersToAdd Test Group",
 		RemoteId:    model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -1497,7 +1479,7 @@ func testTeamMembersToAddSingleTeam(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	group2, err := ss.Group().Create(&model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: "TeamMembersToAdd Test Group",
 		RemoteId:    model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -1508,22 +1490,22 @@ func testTeamMembersToAddSingleTeam(t *testing.T, ss store.Store) {
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	user1, err = ss.User().Save(user1)
-	require.Nil(t, err)
+	user1, nErr := ss.User().Save(user1)
+	require.Nil(t, nErr)
 
 	user2 := &model.User{
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	user2, err = ss.User().Save(user2)
-	require.Nil(t, err)
+	user2, nErr = ss.User().Save(user2)
+	require.Nil(t, nErr)
 
 	user3 := &model.User{
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	user3, err = ss.User().Save(user3)
-	require.Nil(t, err)
+	user3, nErr = ss.User().Save(user3)
+	require.Nil(t, nErr)
 
 	for _, user := range []*model.User{user1, user2} {
 		_, err = ss.Group().UpsertMember(group1.Id, user.Id)
@@ -1542,8 +1524,8 @@ func testTeamMembersToAddSingleTeam(t *testing.T, ss store.Store) {
 		Email:           "success+" + model.NewId() + "@simulator.amazonses.com",
 		Type:            model.TEAM_OPEN,
 	}
-	team1, err = ss.Team().Save(team1)
-	require.Nil(t, err)
+	team1, nErr = ss.Team().Save(team1)
+	require.Nil(t, nErr)
 
 	team2 := &model.Team{
 		DisplayName:     "Name",
@@ -1555,8 +1537,8 @@ func testTeamMembersToAddSingleTeam(t *testing.T, ss store.Store) {
 		Email:           "success+" + model.NewId() + "@simulator.amazonses.com",
 		Type:            model.TEAM_OPEN,
 	}
-	team2, err = ss.Team().Save(team2)
-	require.Nil(t, err)
+	team2, nErr = ss.Team().Save(team2)
+	require.Nil(t, nErr)
 
 	_, err = ss.Group().CreateGroupSyncable(model.NewGroupTeam(group1.Id, team1.Id, true))
 	require.Nil(t, err)
@@ -1580,7 +1562,7 @@ func testTeamMembersToAddSingleTeam(t *testing.T, ss store.Store) {
 func testChannelMembersToAdd(t *testing.T, ss store.Store) {
 	// Create Group
 	group, err := ss.Group().Create(&model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: "ChannelMembersToAdd Test Group",
 		RemoteId:    model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -1592,8 +1574,8 @@ func testChannelMembersToAdd(t *testing.T, ss store.Store) {
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	user, err = ss.User().Save(user)
-	require.Nil(t, err)
+	user, nErr := ss.User().Save(user)
+	require.Nil(t, nErr)
 
 	// Create GroupMember
 	_, err = ss.Group().UpsertMember(group.Id, user.Id)
@@ -1606,7 +1588,7 @@ func testChannelMembersToAdd(t *testing.T, ss store.Store) {
 		Name:        model.NewId(),
 		Type:        model.CHANNEL_OPEN, // Query does not look at type so this shouldn't matter.
 	}
-	channel, nErr := ss.Channel().Save(channel, 9999)
+	channel, nErr = ss.Channel().Save(channel, 9999)
 	require.Nil(t, nErr)
 
 	// Create GroupChannel
@@ -1682,16 +1664,16 @@ func testChannelMembersToAdd(t *testing.T, ss store.Store) {
 	require.Len(t, channelMembers, 1)
 
 	// No result if Channel deleted
-	err = ss.Channel().Delete(channel.Id, model.GetMillis())
-	require.Nil(t, err)
+	nErr = ss.Channel().Delete(channel.Id, model.GetMillis())
+	require.Nil(t, nErr)
 	channelMembers, err = ss.Group().ChannelMembersToAdd(0, nil)
 	require.Nil(t, err)
 	require.Empty(t, channelMembers)
 
 	// reset state of channel and verify
 	channel.DeleteAt = 0
-	_, err = ss.Channel().Update(channel)
-	require.Nil(t, err)
+	_, nErr = ss.Channel().Update(channel)
+	require.Nil(t, nErr)
 	channelMembers, err = ss.Group().ChannelMembersToAdd(0, nil)
 	require.Nil(t, err)
 	require.Len(t, channelMembers, 1)
@@ -1725,22 +1707,22 @@ func testChannelMembersToAdd(t *testing.T, ss store.Store) {
 	require.Len(t, channelMembers, 1)
 
 	// Adding Channel (ChannelMemberHistory) should stop returning result
-	err = ss.ChannelMemberHistory().LogJoinEvent(user.Id, channel.Id, model.GetMillis())
-	require.Nil(t, err)
+	nErr = ss.ChannelMemberHistory().LogJoinEvent(user.Id, channel.Id, model.GetMillis())
+	require.Nil(t, nErr)
 	channelMembers, err = ss.Group().ChannelMembersToAdd(0, nil)
 	require.Nil(t, err)
 	require.Empty(t, channelMembers)
 
 	// Leaving Channel (ChannelMemberHistory) should still not return result
-	err = ss.ChannelMemberHistory().LogLeaveEvent(user.Id, channel.Id, model.GetMillis())
-	require.Nil(t, err)
+	nErr = ss.ChannelMemberHistory().LogLeaveEvent(user.Id, channel.Id, model.GetMillis())
+	require.Nil(t, nErr)
 	channelMembers, err = ss.Group().ChannelMembersToAdd(0, nil)
 	require.Nil(t, err)
 	require.Empty(t, channelMembers)
 
 	// Purging ChannelMemberHistory re-returns the result
-	_, err = ss.ChannelMemberHistory().PermanentDeleteBatch(model.GetMillis()+1, 100)
-	require.Nil(t, err)
+	_, nErr = ss.ChannelMemberHistory().PermanentDeleteBatch(model.GetMillis()+1, 100)
+	require.Nil(t, nErr)
 	channelMembers, err = ss.Group().ChannelMembersToAdd(0, nil)
 	require.Nil(t, err)
 	require.Len(t, channelMembers, 1)
@@ -1748,7 +1730,7 @@ func testChannelMembersToAdd(t *testing.T, ss store.Store) {
 
 func testChannelMembersToAddSingleChannel(t *testing.T, ss store.Store) {
 	group1, err := ss.Group().Create(&model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: "TeamMembersToAdd Test Group",
 		RemoteId:    model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -1756,7 +1738,7 @@ func testChannelMembersToAddSingleChannel(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	group2, err := ss.Group().Create(&model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: "TeamMembersToAdd Test Group",
 		RemoteId:    model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -1767,22 +1749,22 @@ func testChannelMembersToAddSingleChannel(t *testing.T, ss store.Store) {
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	user1, err = ss.User().Save(user1)
-	require.Nil(t, err)
+	user1, nErr := ss.User().Save(user1)
+	require.Nil(t, nErr)
 
 	user2 := &model.User{
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	user2, err = ss.User().Save(user2)
-	require.Nil(t, err)
+	user2, nErr = ss.User().Save(user2)
+	require.Nil(t, nErr)
 
 	user3 := &model.User{
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	user3, err = ss.User().Save(user3)
-	require.Nil(t, err)
+	user3, nErr = ss.User().Save(user3)
+	require.Nil(t, nErr)
 
 	for _, user := range []*model.User{user1, user2} {
 		_, err = ss.Group().UpsertMember(group1.Id, user.Id)
@@ -1796,7 +1778,7 @@ func testChannelMembersToAddSingleChannel(t *testing.T, ss store.Store) {
 		Name:        "z-z-" + model.NewId() + "a",
 		Type:        model.CHANNEL_OPEN,
 	}
-	channel1, nErr := ss.Channel().Save(channel1, 999)
+	channel1, nErr = ss.Channel().Save(channel1, 999)
 	require.Nil(t, nErr)
 
 	channel2 := &model.Channel{
@@ -1893,12 +1875,12 @@ func testTeamMembersToRemove(t *testing.T, ss store.Store) {
 	require.Nil(t, res)
 	res = ss.Team().RemoveMember(data.ConstrainedTeam.Id, data.UserC.Id)
 	require.Nil(t, res)
-	err = ss.Channel().RemoveMember(data.ConstrainedChannel.Id, data.UserA.Id)
-	require.Nil(t, err)
-	err = ss.Channel().RemoveMember(data.ConstrainedChannel.Id, data.UserB.Id)
-	require.Nil(t, err)
-	err = ss.Channel().RemoveMember(data.ConstrainedChannel.Id, data.UserC.Id)
-	require.Nil(t, err)
+	nErr = ss.Channel().RemoveMember(data.ConstrainedChannel.Id, data.UserA.Id)
+	require.Nil(t, nErr)
+	nErr = ss.Channel().RemoveMember(data.ConstrainedChannel.Id, data.UserB.Id)
+	require.Nil(t, nErr)
+	nErr = ss.Channel().RemoveMember(data.ConstrainedChannel.Id, data.UserC.Id)
+	require.Nil(t, nErr)
 }
 
 func testTeamMembersToRemoveSingleTeam(t *testing.T, ss store.Store) {
@@ -1934,8 +1916,8 @@ func testTeamMembersToRemoveSingleTeam(t *testing.T, ss store.Store) {
 		Type:             model.TEAM_OPEN,
 		GroupConstrained: model.NewBool(true),
 	}
-	team1, err = ss.Team().Save(team1)
-	require.Nil(t, err)
+	team1, nErr := ss.Team().Save(team1)
+	require.Nil(t, nErr)
 
 	team2 := &model.Team{
 		DisplayName:      "Name",
@@ -1948,22 +1930,22 @@ func testTeamMembersToRemoveSingleTeam(t *testing.T, ss store.Store) {
 		Type:             model.TEAM_OPEN,
 		GroupConstrained: model.NewBool(true),
 	}
-	team2, err = ss.Team().Save(team2)
-	require.Nil(t, err)
+	team2, nErr = ss.Team().Save(team2)
+	require.Nil(t, nErr)
 
 	for _, user := range []*model.User{user1, user2} {
-		_, err = ss.Team().SaveMember(&model.TeamMember{
+		_, nErr = ss.Team().SaveMember(&model.TeamMember{
 			TeamId: team1.Id,
 			UserId: user.Id,
 		}, 999)
-		require.Nil(t, err)
+		require.Nil(t, nErr)
 	}
 
-	_, err = ss.Team().SaveMember(&model.TeamMember{
+	_, nErr = ss.Team().SaveMember(&model.TeamMember{
 		TeamId: team2.Id,
 		UserId: user3.Id,
 	}, 999)
-	require.Nil(t, err)
+	require.Nil(t, nErr)
 
 	teamMembers, err := ss.Group().TeamMembersToRemove(nil)
 	require.Nil(t, err)
@@ -2045,12 +2027,12 @@ func testChannelMembersToRemove(t *testing.T, ss store.Store) {
 	require.Nil(t, res)
 	res = ss.Team().RemoveMember(data.ConstrainedTeam.Id, data.UserC.Id)
 	require.Nil(t, res)
-	err = ss.Channel().RemoveMember(data.ConstrainedChannel.Id, data.UserA.Id)
-	require.Nil(t, err)
-	err = ss.Channel().RemoveMember(data.ConstrainedChannel.Id, data.UserB.Id)
-	require.Nil(t, err)
-	err = ss.Channel().RemoveMember(data.ConstrainedChannel.Id, data.UserC.Id)
-	require.Nil(t, err)
+	nErr = ss.Channel().RemoveMember(data.ConstrainedChannel.Id, data.UserA.Id)
+	require.Nil(t, nErr)
+	nErr = ss.Channel().RemoveMember(data.ConstrainedChannel.Id, data.UserB.Id)
+	require.Nil(t, nErr)
+	nErr = ss.Channel().RemoveMember(data.ConstrainedChannel.Id, data.UserC.Id)
+	require.Nil(t, nErr)
 }
 
 func testChannelMembersToRemoveSingleChannel(t *testing.T, ss store.Store) {
@@ -2094,20 +2076,20 @@ func testChannelMembersToRemoveSingleChannel(t *testing.T, ss store.Store) {
 	require.Nil(t, nErr)
 
 	for _, user := range []*model.User{user1, user2} {
-		_, err = ss.Channel().SaveMember(&model.ChannelMember{
+		_, nErr = ss.Channel().SaveMember(&model.ChannelMember{
 			ChannelId:   channel1.Id,
 			UserId:      user.Id,
 			NotifyProps: model.GetDefaultChannelNotifyProps(),
 		})
-		require.Nil(t, err)
+		require.Nil(t, nErr)
 	}
 
-	_, err = ss.Channel().SaveMember(&model.ChannelMember{
+	_, nErr = ss.Channel().SaveMember(&model.ChannelMember{
 		ChannelId:   channel2.Id,
 		UserId:      user3.Id,
 		NotifyProps: model.GetDefaultChannelNotifyProps(),
 	})
-	require.Nil(t, err)
+	require.Nil(t, nErr)
 
 	channelMembers, err := ss.Group().ChannelMembersToRemove(nil)
 	require.Nil(t, err)
@@ -2136,7 +2118,7 @@ type removalsData struct {
 func pendingMemberRemovalsDataSetup(t *testing.T, ss store.Store) *removalsData {
 	// create group
 	group, err := ss.Group().Create(&model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: "Pending[Channel|Team]MemberRemovals Test Group",
 		RemoteId:    model.NewId(),
 		Source:      model.GroupSourceLdap,
@@ -2149,24 +2131,24 @@ func pendingMemberRemovalsDataSetup(t *testing.T, ss store.Store) *removalsData 
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	userA, err = ss.User().Save(userA)
-	require.Nil(t, err)
+	userA, nErr := ss.User().Save(userA)
+	require.Nil(t, nErr)
 
 	// userB will not get removed from the group
 	userB := &model.User{
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	userB, err = ss.User().Save(userB)
-	require.Nil(t, err)
+	userB, nErr = ss.User().Save(userB)
+	require.Nil(t, nErr)
 
 	// userC was never in the group
 	userC := &model.User{
 		Email:    MakeEmail(),
 		Username: model.NewId(),
 	}
-	userC, err = ss.User().Save(userC)
-	require.Nil(t, err)
+	userC, nErr = ss.User().Save(userC)
+	require.Nil(t, nErr)
 
 	// add users to group (but not userC)
 	_, err = ss.Group().UpsertMember(group.Id, userA.Id)
@@ -2183,7 +2165,7 @@ func pendingMemberRemovalsDataSetup(t *testing.T, ss store.Store) *removalsData 
 		Type:             model.CHANNEL_PRIVATE,
 		GroupConstrained: model.NewBool(true),
 	}
-	channelConstrained, nErr := ss.Channel().Save(channelConstrained, 9999)
+	channelConstrained, nErr = ss.Channel().Save(channelConstrained, 9999)
 	require.Nil(t, nErr)
 
 	channelUnconstrained := &model.Channel{
@@ -2207,8 +2189,8 @@ func pendingMemberRemovalsDataSetup(t *testing.T, ss store.Store) *removalsData 
 		Type:             model.TEAM_INVITE,
 		GroupConstrained: model.NewBool(true),
 	}
-	teamConstrained, err = ss.Team().Save(teamConstrained)
-	require.Nil(t, err)
+	teamConstrained, nErr = ss.Team().Save(teamConstrained)
+	require.Nil(t, nErr)
 
 	teamUnconstrained := &model.Team{
 		DisplayName:     "Name",
@@ -2220,8 +2202,8 @@ func pendingMemberRemovalsDataSetup(t *testing.T, ss store.Store) *removalsData 
 		Email:           "success+" + model.NewId() + "@simulator.amazonses.com",
 		Type:            model.TEAM_INVITE,
 	}
-	teamUnconstrained, err = ss.Team().Save(teamUnconstrained)
-	require.Nil(t, err)
+	teamUnconstrained, nErr = ss.Team().Save(teamUnconstrained)
+	require.Nil(t, nErr)
 
 	// create groupteams
 	_, err = ss.Group().CreateGroupSyncable(model.NewGroupTeam(group.Id, teamConstrained.Id, true))
@@ -2248,11 +2230,11 @@ func pendingMemberRemovalsDataSetup(t *testing.T, ss store.Store) *removalsData 
 	}
 
 	for _, item := range userIDTeamIDs {
-		_, err = ss.Team().SaveMember(&model.TeamMember{
+		_, nErr = ss.Team().SaveMember(&model.TeamMember{
 			UserId: item[0],
 			TeamId: item[1],
 		}, 99)
-		require.Nil(t, err)
+		require.Nil(t, nErr)
 	}
 
 	// add users to channels
@@ -2299,7 +2281,7 @@ func testGetGroupsByChannel(t *testing.T, ss store.Store) {
 
 	// Create Groups 1, 2 and a deleted group
 	group1, err := ss.Group().Create(&model.Group{
-		Name:           model.NewId(),
+		Name:           model.NewString(model.NewId()),
 		DisplayName:    "group-1",
 		RemoteId:       model.NewId(),
 		Source:         model.GroupSourceLdap,
@@ -2308,7 +2290,7 @@ func testGetGroupsByChannel(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	group2, err := ss.Group().Create(&model.Group{
-		Name:           model.NewId(),
+		Name:           model.NewString(model.NewId()),
 		DisplayName:    "group-2",
 		RemoteId:       model.NewId(),
 		Source:         model.GroupSourceLdap,
@@ -2317,7 +2299,7 @@ func testGetGroupsByChannel(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	deletedGroup, err := ss.Group().Create(&model.Group{
-		Name:           model.NewId(),
+		Name:           model.NewString(model.NewId()),
 		DisplayName:    "group-deleted",
 		RemoteId:       model.NewId(),
 		Source:         model.GroupSourceLdap,
@@ -2349,7 +2331,7 @@ func testGetGroupsByChannel(t *testing.T, ss store.Store) {
 
 	// Create Group3
 	group3, err := ss.Group().Create(&model.Group{
-		Name:           model.NewId(),
+		Name:           model.NewString(model.NewId()),
 		DisplayName:    "group-3",
 		RemoteId:       model.NewId(),
 		Source:         model.GroupSourceLdap,
@@ -2455,7 +2437,7 @@ func testGetGroupsByChannel(t *testing.T, ss store.Store) {
 		{
 			Name:       "Get group matching name",
 			ChannelId:  channel1.Id,
-			Opts:       model.GroupSearchOpts{Q: string([]rune(group1.Name)[2:10])}, // very low change of a name collision
+			Opts:       model.GroupSearchOpts{Q: string([]rune(*group1.Name)[2:10])}, // very low change of a name collision
 			Page:       0,
 			PerPage:    100,
 			Result:     []*model.GroupWithSchemeAdmin{group1WSA},
@@ -2547,7 +2529,7 @@ func testGetGroupsAssociatedToChannelsByTeam(t *testing.T, ss store.Store) {
 
 	// Create Groups 1, 2 and a deleted group
 	group1, err := ss.Group().Create(&model.Group{
-		Name:           model.NewId(),
+		Name:           model.NewString(model.NewId()),
 		DisplayName:    "group-1",
 		RemoteId:       model.NewId(),
 		Source:         model.GroupSourceLdap,
@@ -2556,7 +2538,7 @@ func testGetGroupsAssociatedToChannelsByTeam(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	group2, err := ss.Group().Create(&model.Group{
-		Name:           model.NewId(),
+		Name:           model.NewString(model.NewId()),
 		DisplayName:    "group-2",
 		RemoteId:       model.NewId(),
 		Source:         model.GroupSourceLdap,
@@ -2565,7 +2547,7 @@ func testGetGroupsAssociatedToChannelsByTeam(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	deletedGroup, err := ss.Group().Create(&model.Group{
-		Name:           model.NewId(),
+		Name:           model.NewString(model.NewId()),
 		DisplayName:    "group-deleted",
 		RemoteId:       model.NewId(),
 		Source:         model.GroupSourceLdap,
@@ -2597,7 +2579,7 @@ func testGetGroupsAssociatedToChannelsByTeam(t *testing.T, ss store.Store) {
 
 	// Create Group3
 	group3, err := ss.Group().Create(&model.Group{
-		Name:           model.NewId(),
+		Name:           model.NewString(model.NewId()),
 		DisplayName:    "group-3",
 		RemoteId:       model.NewId(),
 		Source:         model.GroupSourceLdap,
@@ -2695,7 +2677,7 @@ func testGetGroupsAssociatedToChannelsByTeam(t *testing.T, ss store.Store) {
 		{
 			Name:    "Get group matching name",
 			TeamId:  team1.Id,
-			Opts:    model.GroupSearchOpts{Q: string([]rune(group1.Name)[2:10])}, // very low chance of a name collision
+			Opts:    model.GroupSearchOpts{Q: string([]rune(*group1.Name)[2:10])}, // very low chance of a name collision
 			Page:    0,
 			PerPage: 100,
 			Result:  map[string][]*model.GroupWithSchemeAdmin{channel1.Id: {group1WSA}},
@@ -2780,7 +2762,7 @@ func testGetGroupsByTeam(t *testing.T, ss store.Store) {
 
 	// Create Groups 1, 2 and a deleted group
 	group1, err := ss.Group().Create(&model.Group{
-		Name:           model.NewId(),
+		Name:           model.NewString(model.NewId()),
 		DisplayName:    "group-1",
 		RemoteId:       model.NewId(),
 		Source:         model.GroupSourceLdap,
@@ -2789,7 +2771,7 @@ func testGetGroupsByTeam(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	group2, err := ss.Group().Create(&model.Group{
-		Name:           model.NewId(),
+		Name:           model.NewString(model.NewId()),
 		DisplayName:    "group-2",
 		RemoteId:       model.NewId(),
 		Source:         model.GroupSourceLdap,
@@ -2798,7 +2780,7 @@ func testGetGroupsByTeam(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	deletedGroup, err := ss.Group().Create(&model.Group{
-		Name:           model.NewId(),
+		Name:           model.NewString(model.NewId()),
 		DisplayName:    "group-deleted",
 		RemoteId:       model.NewId(),
 		Source:         model.GroupSourceLdap,
@@ -2834,7 +2816,7 @@ func testGetGroupsByTeam(t *testing.T, ss store.Store) {
 
 	// Create Group3
 	group3, err := ss.Group().Create(&model.Group{
-		Name:           model.NewId(),
+		Name:           model.NewString(model.NewId()),
 		DisplayName:    "group-3",
 		RemoteId:       model.NewId(),
 		Source:         model.GroupSourceLdap,
@@ -2944,7 +2926,7 @@ func testGetGroupsByTeam(t *testing.T, ss store.Store) {
 		{
 			Name:       "Get group matching name",
 			TeamId:     team1.Id,
-			Opts:       model.GroupSearchOpts{Q: string([]rune(group1.Name)[2:10])}, // very low change of a name collision
+			Opts:       model.GroupSearchOpts{Q: string([]rune(*group1.Name)[2:10])}, // very low change of a name collision
 			Page:       0,
 			PerPage:    100,
 			Result:     []*model.GroupWithSchemeAdmin{group1WSA},
@@ -3012,14 +2994,15 @@ func testGetGroupsByTeam(t *testing.T, ss store.Store) {
 func testGetGroups(t *testing.T, ss store.Store) {
 	// Create Team1
 	team1 := &model.Team{
-		DisplayName:     "Team1",
-		Description:     model.NewId(),
-		CompanyName:     model.NewId(),
-		AllowOpenInvite: false,
-		InviteId:        model.NewId(),
-		Name:            "zz" + model.NewId(),
-		Email:           "success+" + model.NewId() + "@simulator.amazonses.com",
-		Type:            model.TEAM_OPEN,
+		DisplayName:      "Team1",
+		Description:      model.NewId(),
+		CompanyName:      model.NewId(),
+		AllowOpenInvite:  false,
+		InviteId:         model.NewId(),
+		Name:             "zz" + model.NewId(),
+		Email:            "success+" + model.NewId() + "@simulator.amazonses.com",
+		Type:             model.TEAM_OPEN,
+		GroupConstrained: model.NewBool(true),
 	}
 	team1, err := ss.Team().Save(team1)
 	require.Nil(t, err)
@@ -3038,7 +3021,7 @@ func testGetGroups(t *testing.T, ss store.Store) {
 
 	// Create Groups 1 and 2
 	group1, err := ss.Group().Create(&model.Group{
-		Name:           model.NewId(),
+		Name:           model.NewString(model.NewId()),
 		DisplayName:    "group-1",
 		RemoteId:       model.NewId(),
 		Source:         model.GroupSourceLdap,
@@ -3047,7 +3030,7 @@ func testGetGroups(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	group2, err := ss.Group().Create(&model.Group{
-		Name:           model.NewId() + "-group-2",
+		Name:           model.NewString(model.NewId() + "-group-2"),
 		DisplayName:    "group-2",
 		RemoteId:       model.NewId(),
 		Source:         model.GroupSourceLdap,
@@ -3056,7 +3039,7 @@ func testGetGroups(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	deletedGroup, err := ss.Group().Create(&model.Group{
-		Name:           model.NewId() + "-group-deleted",
+		Name:           model.NewString(model.NewId() + "-group-deleted"),
 		DisplayName:    "group-deleted",
 		RemoteId:       model.NewId(),
 		Source:         model.GroupSourceLdap,
@@ -3100,9 +3083,19 @@ func testGetGroups(t *testing.T, ss store.Store) {
 	channel2, nErr = ss.Channel().Save(channel2, 9999)
 	require.Nil(t, nErr)
 
+	// Create Channel3
+	channel3 := &model.Channel{
+		TeamId:      team1.Id,
+		DisplayName: "Channel3",
+		Name:        model.NewId(),
+		Type:        model.CHANNEL_PRIVATE,
+	}
+	channel3, nErr = ss.Channel().Save(channel3, 9999)
+	require.Nil(t, nErr)
+
 	// Create Group3
 	group3, err := ss.Group().Create(&model.Group{
-		Name:           model.NewId() + "-group-3",
+		Name:           model.NewString(model.NewId() + "-group-3"),
 		DisplayName:    "group-3",
 		RemoteId:       model.NewId(),
 		Source:         model.GroupSourceLdap,
@@ -3170,6 +3163,29 @@ func testGetGroups(t *testing.T, ss store.Store) {
 
 	endCreateTime := u2Update.New.UpdateAt + 1
 
+	// Create Team3
+	team3 := &model.Team{
+		DisplayName:     "Team3",
+		Description:     model.NewId(),
+		CompanyName:     model.NewId(),
+		AllowOpenInvite: false,
+		InviteId:        model.NewId(),
+		Name:            "zz" + model.NewId(),
+		Email:           "success+" + model.NewId() + "@simulator.amazonses.com",
+		Type:            model.TEAM_INVITE,
+	}
+	team3, err = ss.Team().Save(team3)
+	require.Nil(t, err)
+
+	channel4 := &model.Channel{
+		TeamId:      team3.Id,
+		DisplayName: "Channel4",
+		Name:        model.NewId(),
+		Type:        model.CHANNEL_PRIVATE,
+	}
+	channel4, nErr = ss.Channel().Save(channel4, 9999)
+	require.Nil(t, nErr)
+
 	testCases := []struct {
 		Name    string
 		Page    int
@@ -3212,7 +3228,7 @@ func testGetGroups(t *testing.T, ss store.Store) {
 			PerPage: 100,
 			Resultf: func(groups []*model.Group) bool {
 				for _, g := range groups {
-					if !strings.Contains(g.Name, group2NameSubstring) && !strings.Contains(g.DisplayName, group2NameSubstring) {
+					if !strings.Contains(*g.Name, group2NameSubstring) && !strings.Contains(g.DisplayName, group2NameSubstring) {
 						return false
 					}
 				}
@@ -3353,6 +3369,42 @@ func testGetGroups(t *testing.T, ss store.Store) {
 				return len(groups) == 0
 			},
 		},
+		{
+			Name:    "Filter groups from group-constrained teams",
+			Opts:    model.GroupSearchOpts{NotAssociatedToChannel: channel3.Id, FilterParentTeamPermitted: true},
+			Page:    0,
+			PerPage: 100,
+			Resultf: func(groups []*model.Group) bool {
+				return len(groups) == 2 && groups[0].Id == group1.Id && groups[1].Id == group2.Id
+			},
+		},
+		{
+			Name:    "Filter groups from group-constrained page 0",
+			Opts:    model.GroupSearchOpts{NotAssociatedToChannel: channel3.Id, FilterParentTeamPermitted: true},
+			Page:    0,
+			PerPage: 1,
+			Resultf: func(groups []*model.Group) bool {
+				return groups[0].Id == group1.Id
+			},
+		},
+		{
+			Name:    "Filter groups from group-constrained page 1",
+			Opts:    model.GroupSearchOpts{NotAssociatedToChannel: channel3.Id, FilterParentTeamPermitted: true},
+			Page:    1,
+			PerPage: 1,
+			Resultf: func(groups []*model.Group) bool {
+				return groups[0].Id == group2.Id
+			},
+		},
+		{
+			Name:    "Non-group constrained team with no associated groups still returns groups for the child channel",
+			Opts:    model.GroupSearchOpts{NotAssociatedToChannel: channel4.Id, FilterParentTeamPermitted: true},
+			Page:    0,
+			PerPage: 100,
+			Resultf: func(groups []*model.Group) bool {
+				return len(groups) > 0
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -3395,8 +3447,8 @@ func testTeamMembersMinusGroupMembers(t *testing.T, ss store.Store) {
 		users = append(users, user)
 
 		trueOrFalse := int(math.Mod(float64(i), 2)) == 0
-		_, err = ss.Team().SaveMember(&model.TeamMember{TeamId: team.Id, UserId: user.Id, SchemeUser: trueOrFalse, SchemeAdmin: !trueOrFalse}, 999)
-		require.Nil(t, err)
+		_, nErr := ss.Team().SaveMember(&model.TeamMember{TeamId: team.Id, UserId: user.Id, SchemeUser: trueOrFalse, SchemeAdmin: !trueOrFalse}, 999)
+		require.Nil(t, nErr)
 	}
 
 	// Extra user outside of the group member users.
@@ -3407,12 +3459,12 @@ func testTeamMembersMinusGroupMembers(t *testing.T, ss store.Store) {
 	user, err = ss.User().Save(user)
 	require.Nil(t, err)
 	users = append(users, user)
-	_, err = ss.Team().SaveMember(&model.TeamMember{TeamId: team.Id, UserId: user.Id, SchemeUser: true, SchemeAdmin: false}, 999)
-	require.Nil(t, err)
+	_, nErr := ss.Team().SaveMember(&model.TeamMember{TeamId: team.Id, UserId: user.Id, SchemeUser: true, SchemeAdmin: false}, 999)
+	require.Nil(t, nErr)
 
 	for i := 0; i < numberOfGroups; i++ {
 		group := &model.Group{
-			Name:        fmt.Sprintf("n_%d_%s", i, model.NewId()),
+			Name:        model.NewString(fmt.Sprintf("n_%d_%s", i, model.NewId())),
 			DisplayName: model.NewId(),
 			Source:      model.GroupSourceLdap,
 			Description: model.NewId(),
@@ -3575,7 +3627,7 @@ func testChannelMembersMinusGroupMembers(t *testing.T, ss store.Store) {
 
 	for i := 0; i < numberOfGroups; i++ {
 		group := &model.Group{
-			Name:        fmt.Sprintf("n_%d_%s", i, model.NewId()),
+			Name:        model.NewString(fmt.Sprintf("n_%d_%s", i, model.NewId())),
 			DisplayName: model.NewId(),
 			Source:      model.GroupSourceLdap,
 			Description: model.NewId(),
@@ -3685,7 +3737,7 @@ func testChannelMembersMinusGroupMembers(t *testing.T, ss store.Store) {
 
 func groupTestGetMemberCount(t *testing.T, ss store.Store) {
 	group := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		Description: model.NewId(),
@@ -3695,14 +3747,14 @@ func groupTestGetMemberCount(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	var user *model.User
-
+	var nErr error
 	for i := 0; i < 2; i++ {
 		user = &model.User{
 			Email:    MakeEmail(),
 			Username: fmt.Sprintf("%d_%s", i, model.NewId()),
 		}
-		user, err = ss.User().Save(user)
-		require.Nil(t, err)
+		user, nErr = ss.User().Save(user)
+		require.Nil(t, nErr)
 
 		_, err = ss.Group().UpsertMember(group.Id, user.Id)
 		require.Nil(t, err)
@@ -3713,8 +3765,8 @@ func groupTestGetMemberCount(t *testing.T, ss store.Store) {
 	require.Equal(t, int64(2), count)
 
 	user.DeleteAt = 1
-	_, err = ss.User().Update(user, true)
-	require.Nil(t, err)
+	_, nErr = ss.User().Update(user, true)
+	require.Nil(t, nErr)
 
 	count, err = ss.Group().GetMemberCount(group.Id)
 	require.Nil(t, err)
@@ -3730,7 +3782,7 @@ func groupTestAdminRoleGroupsForSyncableMemberChannel(t *testing.T, ss store.Sto
 	require.Nil(t, err)
 
 	group1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		Description: model.NewId(),
@@ -3743,7 +3795,7 @@ func groupTestAdminRoleGroupsForSyncableMemberChannel(t *testing.T, ss store.Sto
 	require.Nil(t, err)
 
 	group2 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		Description: model.NewId(),
@@ -3818,7 +3870,7 @@ func groupTestAdminRoleGroupsForSyncableMemberTeam(t *testing.T, ss store.Store)
 	require.Nil(t, err)
 
 	group1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		Description: model.NewId(),
@@ -3831,7 +3883,7 @@ func groupTestAdminRoleGroupsForSyncableMemberTeam(t *testing.T, ss store.Store)
 	require.Nil(t, err)
 
 	group2 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		Description: model.NewId(),
@@ -3848,8 +3900,8 @@ func groupTestAdminRoleGroupsForSyncableMemberTeam(t *testing.T, ss store.Store)
 		Name:        "zz" + model.NewId(),
 		Type:        model.CHANNEL_OPEN,
 	}
-	team, err = ss.Team().Save(team)
-	require.Nil(t, err)
+	team, nErr := ss.Team().Save(team)
+	require.Nil(t, nErr)
 
 	_, err = ss.Group().CreateGroupSyncable(&model.GroupSyncable{
 		AutoAdd:     true,
@@ -3919,7 +3971,7 @@ func groupTestPermittedSyncableAdminsTeam(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	group1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		Description: model.NewId(),
@@ -3934,7 +3986,7 @@ func groupTestPermittedSyncableAdminsTeam(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	group2 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		Description: model.NewId(),
@@ -3951,8 +4003,8 @@ func groupTestPermittedSyncableAdminsTeam(t *testing.T, ss store.Store) {
 		Name:        "zz" + model.NewId(),
 		Type:        model.CHANNEL_OPEN,
 	}
-	team, err = ss.Team().Save(team)
-	require.Nil(t, err)
+	team, nErr := ss.Team().Save(team)
+	require.Nil(t, nErr)
 
 	_, err = ss.Group().CreateGroupSyncable(&model.GroupSyncable{
 		AutoAdd:     true,
@@ -4025,7 +4077,7 @@ func groupTestPermittedSyncableAdminsChannel(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	group1 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		Description: model.NewId(),
@@ -4040,7 +4092,7 @@ func groupTestPermittedSyncableAdminsChannel(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	group2 := &model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		Description: model.NewId(),
@@ -4152,12 +4204,12 @@ func groupTestpUpdateMembersRoleTeam(t *testing.T, ss store.Store) {
 	require.Nil(t, err)
 
 	for _, user := range []*model.User{user1, user2, user3} {
-		_, err = ss.Team().SaveMember(&model.TeamMember{TeamId: team.Id, UserId: user.Id}, 9999)
-		require.Nil(t, err)
+		_, nErr := ss.Team().SaveMember(&model.TeamMember{TeamId: team.Id, UserId: user.Id}, 9999)
+		require.Nil(t, nErr)
 	}
 
-	_, err = ss.Team().SaveMember(&model.TeamMember{TeamId: team.Id, UserId: user4.Id, SchemeGuest: true}, 9999)
-	require.Nil(t, err)
+	_, nErr := ss.Team().SaveMember(&model.TeamMember{TeamId: team.Id, UserId: user4.Id, SchemeGuest: true}, 9999)
+	require.Nil(t, nErr)
 
 	tests := []struct {
 		testName               string
@@ -4325,7 +4377,7 @@ func groupTestpUpdateMembersRoleChannel(t *testing.T, ss store.Store) {
 
 func groupTestGroupCount(t *testing.T, ss store.Store) {
 	group1, err := ss.Group().Create(&model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
@@ -4338,7 +4390,7 @@ func groupTestGroupCount(t *testing.T, ss store.Store) {
 	require.GreaterOrEqual(t, count, int64(1))
 
 	group2, err := ss.Group().Create(&model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
@@ -4365,7 +4417,7 @@ func groupTestGroupTeamCount(t *testing.T, ss store.Store) {
 	defer ss.Team().PermanentDelete(team.Id)
 
 	group1, err := ss.Group().Create(&model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
@@ -4374,7 +4426,7 @@ func groupTestGroupTeamCount(t *testing.T, ss store.Store) {
 	defer ss.Group().Delete(group1.Id)
 
 	group2, err := ss.Group().Create(&model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
@@ -4410,7 +4462,7 @@ func groupTestGroupChannelCount(t *testing.T, ss store.Store) {
 	defer ss.Channel().Delete(channel.Id, 0)
 
 	group1, err := ss.Group().Create(&model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
@@ -4419,7 +4471,7 @@ func groupTestGroupChannelCount(t *testing.T, ss store.Store) {
 	defer ss.Group().Delete(group1.Id)
 
 	group2, err := ss.Group().Create(&model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
@@ -4446,7 +4498,7 @@ func groupTestGroupChannelCount(t *testing.T, ss store.Store) {
 
 func groupTestGroupMemberCount(t *testing.T, ss store.Store) {
 	group, err := ss.Group().Create(&model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
@@ -4473,7 +4525,7 @@ func groupTestGroupMemberCount(t *testing.T, ss store.Store) {
 
 func groupTestDistinctGroupMemberCount(t *testing.T, ss store.Store) {
 	group1, err := ss.Group().Create(&model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
@@ -4482,7 +4534,7 @@ func groupTestDistinctGroupMemberCount(t *testing.T, ss store.Store) {
 	defer ss.Group().Delete(group1.Id)
 
 	group2, err := ss.Group().Create(&model.Group{
-		Name:        model.NewId(),
+		Name:        model.NewString(model.NewId()),
 		DisplayName: model.NewId(),
 		Source:      model.GroupSourceLdap,
 		RemoteId:    model.NewId(),
@@ -4513,4 +4565,36 @@ func groupTestDistinctGroupMemberCount(t *testing.T, ss store.Store) {
 	countAfter2, err := ss.Group().GroupMemberCount()
 	require.Nil(t, err)
 	require.GreaterOrEqual(t, countAfter2, countAfter1)
+}
+
+func groupTestGroupCountWithAllowReference(t *testing.T, ss store.Store) {
+	initialCount, err := ss.Group().GroupCountWithAllowReference()
+	require.Nil(t, err)
+
+	group1, err := ss.Group().Create(&model.Group{
+		Name:        model.NewString(model.NewId()),
+		DisplayName: model.NewId(),
+		Source:      model.GroupSourceLdap,
+		RemoteId:    model.NewId(),
+	})
+	require.Nil(t, err)
+	defer ss.Group().Delete(group1.Id)
+
+	count, err := ss.Group().GroupCountWithAllowReference()
+	require.Nil(t, err)
+	require.Equal(t, count, initialCount)
+
+	group2, err := ss.Group().Create(&model.Group{
+		Name:           model.NewString(model.NewId()),
+		DisplayName:    model.NewId(),
+		Source:         model.GroupSourceLdap,
+		RemoteId:       model.NewId(),
+		AllowReference: true,
+	})
+	require.Nil(t, err)
+	defer ss.Group().Delete(group2.Id)
+
+	countAfter, err := ss.Group().GroupCountWithAllowReference()
+	require.Nil(t, err)
+	require.Greater(t, countAfter, count)
 }

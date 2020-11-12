@@ -128,6 +128,34 @@ func (watcher *Watcher) PollAndNotify() {
 				default:
 				}
 			}
+		} else if job.Type == model.JOB_TYPE_EXPIRY_NOTIFY {
+			if watcher.workers.ExpiryNotify != nil {
+				select {
+				case watcher.workers.ExpiryNotify.JobChannel() <- *job:
+				default:
+				}
+			}
+		} else if job.Type == model.JOB_TYPE_PRODUCT_NOTICES {
+			if watcher.workers.ProductNotices != nil {
+				select {
+				case watcher.workers.ProductNotices.JobChannel() <- *job:
+				default:
+				}
+			}
+		} else if job.Type == model.JOB_TYPE_ACTIVE_USERS {
+			if watcher.workers.ActiveUsers != nil {
+				select {
+				case watcher.workers.ActiveUsers.JobChannel() <- *job:
+				default:
+				}
+			}
+		} else if job.Type == model.JOB_TYPE_CLOUD {
+			if watcher.workers.Cloud != nil {
+				select {
+				case watcher.workers.Cloud.JobChannel() <- *job:
+				default:
+				}
+			}
 		}
 	}
 }

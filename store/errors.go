@@ -61,7 +61,11 @@ func NewErrConflict(resource string, err error, meta string) *ErrConflict {
 }
 
 func (e *ErrConflict) Error() string {
-	return e.Resource + "exists " + e.meta + " " + e.err.Error()
+	msg := e.Resource + "exists " + e.meta
+	if e.err != nil {
+		msg += " " + e.err.Error()
+	}
+	return msg
 }
 
 func (e *ErrConflict) Unwrap() error {
@@ -83,4 +87,31 @@ func NewErrNotFound(resource, id string) *ErrNotFound {
 
 func (e *ErrNotFound) Error() string {
 	return "resource: " + e.resource + " id: " + e.Id
+}
+
+// ErrOutOfBounds indicates that the requested total numbers of rows
+// was greater than the allowed limit.
+type ErrOutOfBounds struct {
+	value int
+}
+
+func (e *ErrOutOfBounds) Error() string {
+	return fmt.Sprintf("invalid limit parameter: %d", e.value)
+}
+
+func NewErrOutOfBounds(value int) *ErrOutOfBounds {
+	return &ErrOutOfBounds{value: value}
+}
+
+// ErrNotImplemented indicates that some feature or requirement is not implemented yet.
+type ErrNotImplemented struct {
+	detail string
+}
+
+func (e *ErrNotImplemented) Error() string {
+	return e.detail
+}
+
+func NewErrNotImplemented(detail string) *ErrNotImplemented {
+	return &ErrNotImplemented{detail: detail}
 }
