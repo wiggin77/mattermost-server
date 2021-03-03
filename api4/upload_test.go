@@ -8,11 +8,13 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"testing"
 
-	"github.com/mattermost/mattermost-server/v5/model"
-
 	"github.com/stretchr/testify/require"
+
+	"github.com/mattermost/mattermost-server/v5/model"
+	"github.com/mattermost/mattermost-server/v5/utils/fileutils"
 )
 
 func TestCreateUpload(t *testing.T) {
@@ -30,7 +32,7 @@ func TestCreateUpload(t *testing.T) {
 		defer th.App.UpdateConfig(func(cfg *model.Config) { *cfg.FileSettings.EnableFileAttachments = true })
 		u, resp := th.Client.CreateUpload(us)
 		require.Nil(t, u)
-		require.Error(t, resp.Error)
+		require.NotNil(t, resp.Error)
 		require.Equal(t, "api.file.attachments.disabled.app_error", resp.Error.Id)
 		require.Equal(t, http.StatusNotImplemented, resp.StatusCode)
 	})
@@ -39,7 +41,7 @@ func TestCreateUpload(t *testing.T) {
 		us.ChannelId = th.BasicPrivateChannel2.Id
 		u, resp := th.Client.CreateUpload(us)
 		require.Nil(t, u)
-		require.Error(t, resp.Error)
+		require.NotNil(t, resp.Error)
 		require.Equal(t, "api.context.permissions.app_error", resp.Error.Id)
 		require.Equal(t, http.StatusForbidden, resp.StatusCode)
 	})
@@ -50,6 +52,41 @@ func TestCreateUpload(t *testing.T) {
 		require.Nil(t, resp.Error)
 		require.NotEmpty(t, u)
 		require.Equal(t, http.StatusCreated, resp.StatusCode)
+	})
+
+	t.Run("import file", func(t *testing.T) {
+		testsDir, _ := fileutils.FindDir("tests")
+
+		importFile, err := os.Open(testsDir + "/import_test.zip")
+		require.NoError(t, err)
+		defer importFile.Close()
+
+		info, err := importFile.Stat()
+		require.NoError(t, err)
+
+		t.Run("permissions error", func(t *testing.T) {
+			us := &model.UploadSession{
+				Filename: info.Name(),
+				FileSize: info.Size(),
+				Type:     model.UploadTypeImport,
+			}
+			u, resp := th.Client.CreateUpload(us)
+			require.Nil(t, u)
+			require.NotNil(t, resp.Error)
+			require.Equal(t, "api.context.permissions.app_error", resp.Error.Id)
+			require.Equal(t, http.StatusForbidden, resp.StatusCode)
+		})
+
+		t.Run("success", func(t *testing.T) {
+			us := &model.UploadSession{
+				Filename: info.Name(),
+				FileSize: info.Size(),
+				Type:     model.UploadTypeImport,
+			}
+			u, resp := th.SystemAdminClient.CreateUpload(us)
+			require.Nil(t, resp.Error)
+			require.NotEmpty(t, u)
+		})
 	})
 }
 
@@ -74,7 +111,7 @@ func TestGetUpload(t *testing.T) {
 	t.Run("upload not found", func(t *testing.T) {
 		u, resp := th.Client.GetUpload(model.NewId())
 		require.Nil(t, u)
-		require.Error(t, resp.Error)
+		require.NotNil(t, resp.Error)
 		require.Equal(t, "app.upload.get.app_error", resp.Error.Id)
 		require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
@@ -82,7 +119,7 @@ func TestGetUpload(t *testing.T) {
 	t.Run("no permissions", func(t *testing.T) {
 		u, resp := th.Client.GetUpload(us.Id)
 		require.Nil(t, u)
-		require.Error(t, resp.Error)
+		require.NotNil(t, resp.Error)
 		require.Equal(t, "api.upload.get_upload.forbidden.app_error", resp.Error.Id)
 	})
 
@@ -105,7 +142,7 @@ func TestGetUploadsForUser(t *testing.T) {
 
 	t.Run("no permissions", func(t *testing.T) {
 		uss, resp := th.Client.GetUploadsForUser(th.BasicUser2.Id)
-		require.Error(t, resp.Error)
+		require.NotNil(t, resp.Error)
 		require.Equal(t, "api.user.get_uploads_for_user.forbidden.app_error", resp.Error.Id)
 		require.Nil(t, uss)
 	})
@@ -174,14 +211,14 @@ func TestUploadData(t *testing.T) {
 		defer th.App.UpdateConfig(func(cfg *model.Config) { *cfg.FileSettings.EnableFileAttachments = true })
 		info, resp := th.Client.UploadData(model.NewId(), bytes.NewReader(data))
 		require.Nil(t, info)
-		require.Error(t, resp.Error)
+		require.NotNil(t, resp.Error)
 		require.Equal(t, "api.file.attachments.disabled.app_error", resp.Error.Id)
 	})
 
 	t.Run("upload not found", func(t *testing.T) {
 		info, resp := th.Client.UploadData(model.NewId(), bytes.NewReader(data))
 		require.Nil(t, info)
-		require.Error(t, resp.Error)
+		require.NotNil(t, resp.Error)
 		require.Equal(t, "app.upload.get.app_error", resp.Error.Id)
 		require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
@@ -189,7 +226,7 @@ func TestUploadData(t *testing.T) {
 	t.Run("no permissions", func(t *testing.T) {
 		info, resp := th.Client.UploadData(us.Id, bytes.NewReader(data))
 		require.Nil(t, info)
-		require.Error(t, resp.Error)
+		require.NotNil(t, resp.Error)
 		require.Equal(t, "api.context.permissions.app_error", resp.Error.Id)
 	})
 
@@ -201,7 +238,7 @@ func TestUploadData(t *testing.T) {
 
 		info, resp := th.Client.UploadData(u.Id, bytes.NewReader(append(data, 0x00)))
 		require.Nil(t, info)
-		require.Error(t, resp.Error)
+		require.NotNil(t, resp.Error)
 		require.Equal(t, "api.upload.upload_data.invalid_content_length", resp.Error.Id)
 	})
 
@@ -274,19 +311,19 @@ func TestUploadDataMultipart(t *testing.T) {
 		mpData := &bytes.Buffer{}
 		mpWriter := multipart.NewWriter(mpData)
 		part, err := mpWriter.CreateFormFile("data", us.Filename)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		n, err := part.Write(data)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Equal(t, len(data), n)
 		err = mpWriter.Close()
-		require.Nil(t, err)
+		require.NoError(t, err)
 		return mpData, mpWriter.FormDataContentType()
 	}
 
 	t.Run("bad content-type", func(t *testing.T) {
 		info, resp := th.Client.DoUploadFile("/uploads/"+us.Id, data, "multipart/form-data;")
 		require.Nil(t, info)
-		require.Error(t, resp.Error)
+		require.NotNil(t, resp.Error)
 		require.Equal(t, "api.upload.upload_data.invalid_content_type", resp.Error.Id)
 	})
 
@@ -294,11 +331,11 @@ func TestUploadDataMultipart(t *testing.T) {
 		mpData, contentType := genMultipartData(t, data)
 
 		req, err := http.NewRequest("POST", th.Client.ApiUrl+"/uploads/"+us.Id, mpData)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		req.Header.Set("Content-Type", contentType)
 		req.Header.Set(model.HEADER_AUTH, th.Client.AuthType+" "+th.Client.AuthToken)
 		res, err := th.Client.HttpClient.Do(req)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		info := model.FileInfoFromJson(res.Body)
 		res.Body.Close()
 		require.NotEmpty(t, info)
@@ -318,22 +355,22 @@ func TestUploadDataMultipart(t *testing.T) {
 		require.NotEmpty(t, u)
 
 		req, err := http.NewRequest("POST", th.Client.ApiUrl+"/uploads/"+u.Id, mpData)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		req.Header.Set("Content-Type", contentType)
 		req.Header.Set(model.HEADER_AUTH, th.Client.AuthType+" "+th.Client.AuthToken)
 		res, err := th.Client.HttpClient.Do(req)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Equal(t, http.StatusNoContent, res.StatusCode)
 		require.Equal(t, int64(0), res.ContentLength)
 
 		mpData, contentType = genMultipartData(t, data[5*1024*1024:])
 
 		req, err = http.NewRequest("POST", th.Client.ApiUrl+"/uploads/"+u.Id, mpData)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		req.Header.Set("Content-Type", contentType)
 		req.Header.Set(model.HEADER_AUTH, th.Client.AuthType+" "+th.Client.AuthToken)
 		res, err = th.Client.HttpClient.Do(req)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		info := model.FileInfoFromJson(res.Body)
 		res.Body.Close()
 		require.NotEmpty(t, info)

@@ -126,11 +126,11 @@ func TestUserIsValid(t *testing.T) {
 	require.True(t, HasExpectedUserIsValidError(err, "nickname", user.Id), "expected user is valid error: %s", err.Error())
 
 	user.Nickname = strings.Repeat("a", 64)
-	require.Error(t, user.IsValid())
+	require.Nil(t, user.IsValid())
 
 	user.FirstName = ""
 	user.LastName = ""
-	require.Error(t, user.IsValid())
+	require.Nil(t, user.IsValid())
 
 	user.FirstName = strings.Repeat("a", 65)
 	err = user.IsValid()
@@ -143,7 +143,7 @@ func TestUserIsValid(t *testing.T) {
 
 	user.LastName = strings.Repeat("a", 64)
 	user.Position = strings.Repeat("a", 128)
-	require.Error(t, user.IsValid())
+	require.Nil(t, user.IsValid())
 
 	user.Position = strings.Repeat("a", 129)
 	err = user.IsValid()
@@ -353,7 +353,9 @@ func TestUserSlice(t *testing.T) {
 }
 
 func TestGeneratePassword(t *testing.T) {
-	passwordRandomSource = rand.NewSource(12345)
+	passwordRandom = lockedRand{
+		rn: rand.New(rand.NewSource(12345)),
+	}
 
 	t.Run("Should be the minimum length or 4, whichever is less", func(t *testing.T) {
 		password1 := GeneratePassword(5)
@@ -371,5 +373,11 @@ func TestGeneratePassword(t *testing.T) {
 		assert.Contains(t, []rune(passwordNumbers), []rune(password)[1])
 		assert.Contains(t, []rune(passwordLowerCaseLetters), []rune(password)[2])
 		assert.Contains(t, []rune(passwordSpecialChars), []rune(password)[3])
+	})
+
+	t.Run("Should not fail on concurrent calls", func(t *testing.T) {
+		for i := 0; i < 10; i++ {
+			go GeneratePassword(10)
+		}
 	})
 }

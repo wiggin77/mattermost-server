@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/mattermost/mattermost-server/v5/model"
-	"github.com/mattermost/mattermost-server/v5/services/mfa"
+	"github.com/mattermost/mattermost-server/v5/shared/mfa"
 	"github.com/mattermost/mattermost-server/v5/utils"
 )
 
@@ -19,6 +19,7 @@ const (
 	TokenLocationHeader
 	TokenLocationCookie
 	TokenLocationQueryString
+	TokenLocationCloudHeader
 )
 
 func (tl TokenLocation) String() string {
@@ -31,6 +32,8 @@ func (tl TokenLocation) String() string {
 		return "Cookie"
 	case TokenLocationQueryString:
 		return "QueryString"
+	case TokenLocationCloudHeader:
+		return "CloudHeader"
 	default:
 		return "Unknown"
 	}
@@ -185,10 +188,13 @@ func (a *App) CheckUserMfa(user *model.User, token string) *model.AppError {
 		return nil
 	}
 
-	mfaService := mfa.New(a, a.Srv().Store)
-	ok, err := mfaService.ValidateToken(user.MfaSecret, token)
+	if !*a.Config().ServiceSettings.EnableMultifactorAuthentication {
+		return model.NewAppError("CheckUserMfa", "mfa.mfa_disabled.app_error", nil, "", http.StatusNotImplemented)
+	}
+
+	ok, err := mfa.New(a.Srv().Store.User()).ValidateToken(user.MfaSecret, token)
 	if err != nil {
-		return err
+		return model.NewAppError("CheckUserMfa", "mfa.validate_token.authenticate.app_error", nil, err.Error(), http.StatusBadRequest)
 	}
 
 	if !ok {
@@ -279,6 +285,10 @@ func ParseAuthTokenFromRequest(r *http.Request) (string, TokenLocation) {
 	// Attempt to parse token out of the query string
 	if token := r.URL.Query().Get("access_token"); token != "" {
 		return token, TokenLocationQueryString
+	}
+
+	if token := r.Header.Get(model.HEADER_CLOUD_TOKEN); token != "" {
+		return token, TokenLocationCloudHeader
 	}
 
 	return "", TokenLocationNotFound

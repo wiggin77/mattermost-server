@@ -9,7 +9,7 @@ def platformStages = new org.mattermost.PlatformStages()
 
 def rndEE = UUID.randomUUID().toString()
 def rndTE = UUID.randomUUID().toString()
-def mmBuilderServer = 'mattermost/mattermost-build-server:20200731_golang-1.14.6'
+def mmBuilderServer = 'mattermost/mattermost-build-server:20201119_golang-1.15.5'
 def mmBuilderWebapp = 'mattermost/mattermost-build-webapp:oct-2-2018'
 
 pipeline {
@@ -49,6 +49,9 @@ pipeline {
               platformStages.platformCheckoutTE(env.BRANCH_NAME)
               platformStages.platformCheckoutEE(env.BRANCH_NAME)
               platformStages.platformCheckoutRedux(env.BRANCH_NAME)
+              platformStages.platformCheckoutEEGOSaml('release-5.x')
+              platformStages.platformCheckoutEEGOXML('release-5.x')
+              platformStages.platformCheckoutEEGOXMLDsig('release-5.x')
               SERVER_GIT_COMMIT=platformStages.platformServerCommitHash()
               try {
                 platformStages.after5Dot20AddGOBINBuild(env.BRANCH_NAME + '.' + env.BUILD_NUMBER + '.' + SERVER_GIT_COMMIT, rndEE, false, mmBuilderServer, mmBuilderWebapp)

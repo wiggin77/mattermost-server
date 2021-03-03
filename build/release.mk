@@ -79,6 +79,7 @@ package:
 	OUTPUT_CONFIG=$(PWD)/$(DIST_PATH)/config/config.json go generate ./config
 	cp -RL fonts $(DIST_PATH)
 	cp -RL templates $(DIST_PATH)
+	rm -rf $(DIST_PATH)/templates/*.mjml $(DIST_PATH)/templates/partials/
 	cp -RL i18n $(DIST_PATH)
 
 	@# Disable developer settings
@@ -102,6 +103,7 @@ package:
 	@# Help files
 ifeq ($(BUILD_ENTERPRISE_READY),true)
 	cp $(BUILD_ENTERPRISE_DIR)/ENTERPRISE-EDITION-LICENSE.txt $(DIST_PATH)
+	cp -L $(BUILD_ENTERPRISE_DIR)/cloud/config/cloud_defaults.json $(DIST_PATH)/config
 else
 	cp build/MIT-COMPILED-LICENSE.md $(DIST_PATH)
 endif

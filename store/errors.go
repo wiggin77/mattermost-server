@@ -7,7 +7,7 @@ import (
 	"fmt"
 )
 
-// ErrInvalidInput indicates an error that has occured due to an invalid input.
+// ErrInvalidInput indicates an error that has occurred due to an invalid input.
 type ErrInvalidInput struct {
 	Entity string      // The entity which was sent as the input.
 	Field  string      // The field of the entity which was invalid.
@@ -26,7 +26,7 @@ func (e *ErrInvalidInput) Error() string {
 	return fmt.Sprintf("invalid input: entity: %s field: %s value: %s", e.Entity, e.Field, e.Value)
 }
 
-// ErrLimitExceeded indicates an error that has occured because some value exceeded a limit.
+// ErrLimitExceeded indicates an error that has occurred because some value exceeded a limit.
 type ErrLimitExceeded struct {
 	What  string // What was the object that exceeded.
 	Count int    // The value of the object.
@@ -45,7 +45,7 @@ func (e *ErrLimitExceeded) Error() string {
 	return fmt.Sprintf("limit exceeded: what: %s count: %d metadata: %s", e.What, e.Count, e.meta)
 }
 
-// ErrConflict indicates a conflict that occured.
+// ErrConflict indicates a conflict that occurred.
 type ErrConflict struct {
 	Resource string // The resource which created the conflict.
 	err      error  // Internal error.
@@ -75,18 +75,18 @@ func (e *ErrConflict) Unwrap() error {
 // ErrNotFound indicates that a resource was not found
 type ErrNotFound struct {
 	resource string
-	Id       string
+	ID       string
 }
 
 func NewErrNotFound(resource, id string) *ErrNotFound {
 	return &ErrNotFound{
 		resource: resource,
-		Id:       id,
+		ID:       id,
 	}
 }
 
 func (e *ErrNotFound) Error() string {
-	return "resource: " + e.resource + " id: " + e.Id
+	return "resource: " + e.resource + " id: " + e.ID
 }
 
 // ErrOutOfBounds indicates that the requested total numbers of rows
